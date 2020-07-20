@@ -1,0 +1,14 @@
+---
+title: 'Tornado outbreak climatology in the United States (1995 - 2019): Definitions,
+  description, and statistical analyses'
+author: "Zoe Schroder"
+date: "7/20/2020"
+output: html_document
+---
+
+```{r}
+Tor.spdf <- read.csv(file = "1950-2018_actual_tornadoes.csv")
+sp::coordinates(Tor.spdf) <- ~ slon + slat
+Tor.sfdf <- st_as_sf(Tor.spdf)
+st_crs(Tor.sfdf) <- 4326
+```
