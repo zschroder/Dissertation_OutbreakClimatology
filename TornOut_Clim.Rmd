@@ -9,21 +9,26 @@ output: html_document
 Load the libraries needed for this project. 
 ```{r}
 suppressMessages(library(sf))
+suppressMessages(library(dplyr))
+#install.packages("lubridate")
+suppressMessages(library(lubridate))
+suppressMessages(library(USAboundaries))
+suppressMessages(library(tmap))
 ```
 
 ## Tornado-Level Statistics: 
 
 The newest GIS shapefile contains missing geometries for more than 30% of the tornadoes. The number of missing geometries is highest after 1995. Instead here we use the csv file from https://www.spc.noaa.gov/wcm/#data  Use the start lon/lat and create a `sp` object then convert to `sf`. Set the coordinate reference system (crs) to ESPG 4326.
 ```{r}
-Tor.spdf <- read.csv(file = "1950-2018_actual_tornadoes.csv")
-sp::coordinates(Tor.spdf) <- ~ slon + slat
-Tor.sfdf <- st_as_sf(Tor.spdf)
-st_crs(Tor.sfdf) <- 4326
+Torn.spdf <- read.csv(file = "1950-2018_actual_tornadoes.csv")
+sp::coordinates(Torn.spdf) <- ~ slon + slat
+Torn.sfdf <- st_as_sf(Torn.spdf)
+st_crs(Torn.sfdf) <- 4326
 ```
 
 Remove tornadoes in Hawaii, Alaska, and Puerto Rico and those occurring before 1994. That year marks the beginning of comprehensive WSR-88D radar. For missing EF ratings use the modification rules (if/else) defined here: https://www.spc.noaa.gov/wcm/OneTor_F-scale-modifications.pdf 
 ```{r}
-All_Tornadoes <- Tor.sfdf %>%
+All_Tornadoes <- Torn.sfdf %>%
   filter(yr >= 1994,
          !st %in% c("AK", "PR", "HI")) %>%
   mutate(mag = ifelse(mag == -9 & len <= 5, 0, mag),
@@ -107,4 +112,132 @@ proc.time() - stime
 Add the group number to each tornado. 
 ```{r}
 All_Tornadoes$groupNumber <- groupNumber
+```
+
+# Tornado Counts
+
+```{r}
+Torn2018 <- All_Tornadoes %>%
+  filter(yr == 2018)
+```
+In 2018, there were 1126 tornadoes. 
+
+```{r}
+sum(Torn2018$fat, Torn2018$inj)
+#209 casualties
+```
+
+`Generate the state and county borders`
+```{r}
+sts <- state.name[!state.name %in% c("Alaska", "Hawaii")]
+stateBorders <- us_states(states = sts)
+counties.sf <- us_counties()
+
+tm_shape(Torn2018) +
+  tm_dots() + 
+tm_shape(stateBorders, projection = "laea_NA", is.master = TRUE) + 
+  tm_borders()
+#upside down triangles and colored by EF rating
+```
+2018 tornadoes only: 
+```{r}
+states.sf <- st_transform(stateBorders, 
+                            crs = st_crs(Torn2018))
+gI <- st_intersects(Torn2018, states.sf, sparse = FALSE)
+colnames(gI) <- states.sf$name
+states.sf$GroupDayCount <- colSums(gI)
+```
+
+Remove Alaska, Hawaii, and Puerto Rico from the `states.sf` data frame.
+```{r}
+states.sf <- states.sf %>% 
+  filter(!stusps %in% c("AK", "PR", "HI"))
+```
+
+Create a map of the outbreak density in each county in the United States. Fill by the `GroupDayCount` column. 
+```{r}
+states.sf <- st_transform(states.sf, 
+                            crs = st_crs(stateBorders))
+Torn2018 <- st_transform(Torn2018, 
+                            crs = st_crs(stateBorders))
+```
+
+```{r}
+tm_shape(Torn2018) +
+  tm_dots(alpha = 0, border.alpha = 0) +
+tm_shape(states.sf, is.master = TRUE, projection = "merc") +
+   tm_fill("GroupDayCount",
+            title = "Tornado Counts",
+            palette = "Reds", breaks = c(0, 25, 50, 75, 100)) +
+  tm_borders(col = "gray", alpha = .3) +
+  tm_compass(size = 5, position = c("right", "top")) + tm_scale_bar(width = 0.6, size = 1.4) +
+  tm_layout(legend.position = c("right", "bottom"),
+                   attr.position = c("left", "bottom"),
+                   legend.frame = FALSE,
+                   #title = "Tornado Group Days by County [1994-2017]",
+                   #title.size = 1.3,
+                   #title.position = c("left", "TOP"),
+                   inner.margins = c(.15, .0, .0, 0),
+            legend.width = -0.2, 
+            legend.height = -0.3, 
+            legend.title.size=1.5,
+            legend.text.size = 1.25,
+            legend.bg.color = "white",
+            legend.bg.alpha =1) +
+tm_shape(stateBorders, is.master = FALSE) +
+  tm_borders() 
+```
+
+State tornado counts from 1994 to 2018. 
+
+```{r}
+states.sf <- st_transform(stateBorders, 
+                            crs = st_crs(All_Tornadoes))
+gI <- st_intersects(All_Tornadoes, states.sf, sparse = FALSE)
+colnames(gI) <- states.sf$name
+states.sf$GroupDayCount <- colSums(gI)
+```
+
+Remove Alaska, Hawaii, and Puerto Rico from the `states.sf` data frame.
+```{r}
+states.sf <- states.sf %>% 
+  filter(!stusps %in% c("AK", "PR", "HI"))
+```
+
+Create a map of the outbreak density in each county in the United States. Fill by the `GroupDayCount` column. 
+```{r}
+states.sf <- st_transform(states.sf, 
+                            crs = st_crs(stateBorders))
+All_Tornadoes <- st_transform(All_Tornadoes, 
+                            crs = st_crs(stateBorders))
+```
+
+```{r}
+texas <- All_Tornadoes %>%
+  filter(st == "TX")
+
+tm_shape(All_Tornadoes) +
+  tm_dots(alpha = 0, border.alpha = 0) +
+tm_shape(states.sf, is.master = TRUE, projection = "merc") +
+   tm_fill("GroupDayCount",
+            title = "Tornado Counts",
+            palette = "Reds", breaks = c(0, 1000, 2000, 3000, 4000)) +
+  tm_text("GroupDayCount") +
+  tm_borders(col = "gray", alpha = .3) +
+  tm_compass(size = 5, position = c("right", "top")) + tm_scale_bar(width = 0.6, size = 1.4) +
+  tm_layout(legend.position = c("right", "bottom"),
+                   attr.position = c("left", "bottom"),
+                   legend.frame = FALSE,
+                   #title = "Tornado Group Days by County [1994-2017]",
+                   #title.size = 1.3,
+                   #title.position = c("left", "TOP"),
+                   inner.margins = c(.15, .0, .0, 0),
+            legend.width = -0.2, 
+            legend.height = -0.3, 
+            legend.title.size=1.5,
+            legend.text.size = 1.25,
+            legend.bg.color = "white",
+            legend.bg.alpha =1) +
+tm_shape(stateBorders, is.master = FALSE) +
+  tm_borders() 
 ```
