@@ -4,6 +4,8 @@ title: 'Tornado outbreak climatology in the United States (1995 - 2019): Definit
 author: "Zoe Schroder"
 date: "7/20/2020"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 Load the libraries needed for this project. 
@@ -160,28 +162,88 @@ states.sf <- st_transform(states.sf,
                             crs = st_crs(stateBorders))
 Torn2018 <- st_transform(Torn2018, 
                             crs = st_crs(stateBorders))
+
 ```
 
 ```{r}
 tm_shape(Torn2018) +
-  tm_dots(alpha = 0, border.alpha = 0) +
+  tm_dots(alpha = 1, border.alpha = 1) +
 tm_shape(states.sf, is.master = TRUE, projection = "merc") +
-   tm_fill("GroupDayCount",
+  tm_fill("GroupDayCount",
             title = "Tornado Counts",
-            palette = "Reds", breaks = c(0, 25, 50, 75, 100)) +
+            palette = "Reds", breaks = c(0, 20, 40, 60, 80, 100)) +
+  tm_text("GroupDayCount", size = 0.75, just = c("left", "top")) +
   tm_borders(col = "gray", alpha = .3) +
-  tm_compass(size = 5, position = c("right", "top")) + tm_scale_bar(width = 0.6, size = 1.4) +
+  tm_compass(size = 5, position = c("right", "top")) + tm_scale_bar(width = 0.5, size = 1.4) +
   tm_layout(legend.position = c("right", "bottom"),
                    attr.position = c("left", "bottom"),
                    legend.frame = FALSE,
                    #title = "Tornado Group Days by County [1994-2017]",
                    #title.size = 1.3,
                    #title.position = c("left", "TOP"),
-                   inner.margins = c(.15, .0, .0, 0),
+                   inner.margins = c(.1, .05, .05, 0.05),
             legend.width = -0.2, 
             legend.height = -0.3, 
-            legend.title.size=1.5,
-            legend.text.size = 1.25,
+            legend.title.size=1.25,
+            legend.text.size = 1.1,
+            legend.bg.color = "white",
+            legend.bg.alpha =1) +
+tm_shape(stateBorders, is.master = FALSE) +
+  tm_borders() 
+```
+
+```{r}
+totcas <- Torn2018 %>%
+  group_by(st) %>%
+  summarize(casualties = sum(cas))
+
+totcas <- st_transform(totcas, crs = st_crs(stateBorders))
+
+usa <- c("DE", "ME", "NJ", "VT")
+miss_usa <- states.sf %>%
+  filter(stusps %in% usa)
+
+casualties <- as.data.frame(as.matrix(c(0,0,0,0), nrow = 1))
+colnames(casualties) = c("casualties")
+
+miss_usa <- miss_usa %>%
+  mutate(casualties = rep(0,4))
+
+miss_usa <- st_transform(miss_usa, crs = st_crs(stateBorders))
+
+miss_usa <- miss_usa %>%
+ select(stusps, casualties, geometry)
+colnames(miss_usa) <- c("st", "casualties", "geometry")
+
+totcas <- rbind(totcas, miss_usa)
+states.sf <- st_transform(states.sf, 
+                            crs = st_crs(stateBorders))
+
+states.sf = cbind(states.sf,totcas$casualties)
+```
+
+**NOT WORKING**
+```{r, eval = FALSE}
+tm_shape(totcas) +
+  tm_dots(alpha = 0, border.alpha = 0) +
+tm_shape(states.sf, is.master = TRUE, projection = "merc") +
+  tm_fill("totcas.casualties",
+            title = "Tornado Counts",
+            palette = "Reds", breaks = c(0, 5, 10, 15, 20, 25, 30, 35)) +
+  tm_text("totcas.casualties", size = 0.75, just = c("left", "top")) +
+  tm_borders(col = "gray", alpha = .3) +
+  tm_compass(size = 5, position = c("right", "top")) + tm_scale_bar(width = 0.5, size = 1.4) +
+  tm_layout(legend.position = c("right", "bottom"),
+                   attr.position = c("left", "bottom"),
+                   legend.frame = FALSE,
+                   #title = "Tornado Group Days by County [1994-2017]",
+                   #title.size = 1.3,
+                   #title.position = c("left", "TOP"),
+                   inner.margins = c(.1, .05, .05, 0.05),
+            legend.width = -0.2, 
+            legend.height = -0.3, 
+            legend.title.size=1.25,
+            legend.text.size = 1.1,
             legend.bg.color = "white",
             legend.bg.alpha =1) +
 tm_shape(stateBorders, is.master = FALSE) +
@@ -191,7 +253,7 @@ tm_shape(stateBorders, is.master = FALSE) +
 State tornado counts from 1994 to 2018. 
 
 ```{r}
-states.sf <- st_transform(stateBorders, 
+states.sf <- st_transform(stateBorders,  
                             crs = st_crs(All_Tornadoes))
 gI <- st_intersects(All_Tornadoes, states.sf, sparse = FALSE)
 colnames(gI) <- states.sf$name
@@ -241,3 +303,104 @@ tm_shape(states.sf, is.master = TRUE, projection = "merc") +
 tm_shape(stateBorders, is.master = FALSE) +
   tm_borders() 
 ```
+
+
+
+# Monthly and Weekly Variation
+
+```{r}
+TornsbyWeek <- All_Tornadoes %>% 
+  group_by(week = week(cDate)) %>%
+  summarize(totaltornadoes = n())
+```
+
+`Empirical Probability of getting a cluster by week`
+```{r}
+Years <- 2018-1994 + 1
+
+lambdas <- TornsbyWeek$totalclusters / Years
+probs <- (1 - dpois(0, lambdas)) * 100
+
+TornsbyWeek <- cbind(TornsbyWeek, probs)
+```
+
+`Get the week labels for the data`
+```{r}
+x.Date <- as.Date(paste(rep(1994:2018, each = 12), rep(1:12, 2), 1, sep = "-"))
+library(zoo)
+x <- zoo(rnorm(24), x.Date)
+times <- time(x)
+ticks <- as.data.frame(x = seq(times[1], times[length(times)], by = "weeks"))
+
+week <- as.data.frame(ticks[1:53,])
+  
+months <- as.data.frame(format(week, "%b"))
+Mo <- as.data.frame(format(week, "%m"))
+day <- as.data.frame(format(week, "%d"))
+
+dat <- as.data.frame(cbind(week, Mo, months, day))
+colnames(dat) <- c("Week", "Mo", "Month", "Day") 
+
+dat <- dat %>%
+  group_by(Month, Day, Mo) %>%
+  summarize(count = n(),
+            Week = paste0(Month, " ", Day))
+
+
+dat <- dat[order(dat$Mo),]
+```
+
+```{r}
+labels = dat$Week
+```
+
+```{r}
+A <- ggplot(TornsbyWeek, (aes(week))) +
+  #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_line(aes(y = probs/100), color = "black", lwd = 1) +
+  scale_x_continuous(expand = c(0, 0), breaks = c(seq(1,53,3)), limits = c(1, 53), labels = labels[seq(1, length(labels), 3)]) +
+  scale_y_continuous(limits = c(0, 1)) + 
+#  geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  theme_bw() +
+  xlab("") +
+  ylab("Probability of a cluster\n ")
+
+A <- A + theme(panel.grid = element_blank(), axis.title.y = element_text(colour = "black"), axis.text.y = element_text(color = "black"),  axis.text.x = element_text(angle = 45, hjust = 1), axis.text = element_text(size = 12), axis.title=element_text(size=14)) + ggtitle("A")
+```
+Figure 2: Probability of a Cluster
+
+
+```{r}
+B <- ggplot(TornsbyWeek, (aes(week))) +
+  #geom_smooth(aes(x = week, y = avgsize), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_line(aes(y = avgsize), color = "black", lwd = 1) +
+  scale_x_continuous(expand = c(0, 0), breaks = c(seq(1,53,3)), limits = c(1, 53), labels = labels[seq(1, length(labels), 3)]) +
+  scale_y_continuous(breaks = c(seq(0,50,10)), limits = c(0, 50)) + 
+  theme_bw() +
+  xlab("") +
+  ylab("Number of tornadoes\n ")
+
+B <- B + theme(panel.grid = element_blank(), axis.title.y = element_text(colour = "black"), axis.text.y = element_text(color = "black"),  axis.text.x = element_text(angle = 45, hjust = 1), axis.text = element_text(size = 12), axis.title=element_text(size=14)) + ggtitle("B")
+```
+
+```{r}
+C <- ggplot(TornsbyWeek, (aes(week))) +
+  #geom_smooth(aes(x = week, y = as.numeric(avgcasperkm)), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_line(aes(y = as.numeric(avgcasperkm)), color = "black", lwd = 1) +
+  scale_x_continuous(expand = c(0, 0), breaks = c(seq(1,53,3)), limits = c(1, 53), labels = labels[seq(1, length(labels), 3)]) +
+  #scale_y_continuous(breaks = c(seq(0,150,25)), limits = c(0, 150)) + 
+  theme_bw() +
+  xlab("") +
+  ylab("Number of casualties\n")
+
+C <- C + theme(panel.grid = element_blank(), axis.title.y = element_text(colour = "black"), axis.text.y = element_text(color = "black"),  axis.text.x = element_text(angle = 45, hjust = 1), axis.text = element_text(size = 12), axis.title=element_text(size=14)) + ggtitle("C")
+C
+```
+
+
+```{r}
+ggarrange(A, B, C, ncol = 1)
+```
+
+
+
