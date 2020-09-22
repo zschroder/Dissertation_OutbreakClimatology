@@ -330,7 +330,7 @@ Torn <- st_transform(Torn,
 
 ```
 
-```{r, eval = FALSE}
+```{r}
 tm_shape(Torn) +
   tm_dots(alpha = 1, border.alpha = 1) +
 tm_shape(states.sf, is.master = TRUE, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") +
@@ -358,7 +358,7 @@ tm_shape(stateBorders, is.master = FALSE) +
 ```
 
 
-```{r, eval = FALSE}
+```{r}
 totcas <- All_Tornadoes %>%
   group_by(st) %>%
   summarize(totaltorns = n(), 
@@ -387,7 +387,7 @@ states.sf <- st_as_sf(test,
 st_geometry(states.sf) <- "geometry"
 ```
 
-```{r, eval = FALSE}
+```{r}
 tm_shape(totcas) +
   tm_dots(alpha = 0, border.alpha = 0) +
 tm_shape(test, is.master = TRUE, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") +
@@ -415,9 +415,15 @@ tm_shape(stateBorders, is.master = FALSE) +
 ```
 
 ```{r}
-#load("BigDays.RData")
+#save(All_Tornadoes, BigDays.sfdfT, BigDayTornadoes, file = "BigDays.RData")
+load("BigDays.RData")
 ```
 
+```{r}
+BigDayTornadoes <- All_Tornadoes %>% 
+  filter(groupNumber %in% BigDays.sfdfT$groupNumber,
+         cDate %in% BigDays.sfdfT$cDate)
+```
 
 Figure of 1994-2000 and 2010-2018 county maximized outbreak activity
 
@@ -428,7 +434,6 @@ gI <- st_intersects(BigDays.sfdfT, counties.sf, sparse = FALSE)
 colnames(gI) <- counties.sf$name
 counties.sf$GroupDayCount <- colSums(gI)
 ```
-
 
 ```{r}
 BigDayTornadoes <- All_Tornadoes %>%
@@ -450,7 +455,7 @@ states.sf <- states.sf %>%
 ```
 
 **Create a map showing the frequency of big tornado days by county. First transform the CRS of the county boundaries to match the CRS of `BigDays.sfdfT`.**
-```{r, eval = FALSE}
+```{r}
 counties.sf <- st_transform(counties.sf, 
                             crs = st_crs(BigDays.sfdfT))
 
@@ -467,7 +472,7 @@ groupDayCentroids.sfdfT$groupDensity <- groupDayCentroids.sfdfT$nT/groupDayCentr
 
 *Extract the Hull, centroids, and tornadoes for the May 30, 2004 big day. *
 
-```{r, eval = FALSE}
+```{r}
 May27 <- BigDays.sfdfT %>%
   filter(cDate == "1996-05-27")
 May27 <- st_convex_hull(May27)
@@ -483,7 +488,7 @@ May27tornadoes <- May27tornadoes %>%
 ```
 
 **Make a map of the May 30 tornado day. Obtain the state and county boundaries from the `USAboundaries` package. **
-```{r, eval = FALSE}
+```{r}
 May27tornadoes$Hour2 <- cut(May27tornadoes$Hour2, breaks=c(6,12,18,24,30))
 
 May27 <- (tm_shape(stateBorders) + 
@@ -517,7 +522,7 @@ tm_shape(May27centroid) +
   tm_symbols(size = 1.25, col = "black", shape = 24) )
 ```
 
-```{r, eval = FALSE}
+```{r}
 May05 <- BigDays.sfdfT %>%
   filter(cDate == "2007-05-05")
 May05 <- st_convex_hull(May05)
@@ -533,7 +538,7 @@ May05tornadoes <- May05tornadoes %>%
 ```
 
 **Make a map of the May 30 tornado day. Obtain the state and county boundaries from the `USAboundaries` package. **
-```{r, eval = FALSE}
+```{r}
 May05tornadoes$Hour2 <- cut(May05tornadoes$Hour2, breaks=c(6,12,18,24,30))
 
 May05 <- (tm_shape(stateBorders) + 
