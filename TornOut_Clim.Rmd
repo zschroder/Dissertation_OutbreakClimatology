@@ -1130,16 +1130,26 @@ class(tmp_raster)
 
 
 Month1994to2020 <- seq(1369,1688, 1)
+test<- rep(1369:1688, 12)
 
 January1994 <- subset(tmp_raster, 1369)
-as.data.frame(January1994) #-- > must cut it to the extent of the US
+plot(January1994)
+Jan1994.sfdf <- as.data.frame(January1994, row.names=NULL, optional=FALSE, xy=TRUE, 
+              na.rm=TRUE, long=TRUE) #-- > must cut it to the extent of the US
+colnames(Jan1994.sfdf) <- c("Longitude", "Latitude", "Date", "Anomaly")
+
 
 September2020 <- subset(tmp_raster, 1688)
+plot(September2020)
 ```
 
 ```{r, eval = FALSE}
+jan1994 <- subset(tmp_raster, 1369)
+feb94 <- subset(tmp_raster, 1370)
+
 for(i in Month1994to2020){
-  print(i)
+  print(i) 
+raster_i
   #if year = 1994 and month = 1 then you want subset(tmp_raster, 1369)
   CAPE <- raster(rb, layer = 375)
 }
