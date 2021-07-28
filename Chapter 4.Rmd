@@ -3,6 +3,8 @@ title: "Chapter 4"
 author: "Professor Zoe Schroder"
 date: "7/27/2021"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ## Part 1: Tornado data
@@ -10,12 +12,10 @@ output: html_document
 Load packages and suppress the messages of the packages. 
 ```{r}
 suppressMessages(library(lubridate))
-suppressMessages(library(sf))
 suppressMessages(library(tmap))
 suppressMessages(library(USAboundaries))
 suppressMessages(library(rgeos))
 suppressMessages(library(dplyr))
-suppressMessages(library(ggplot2))
 suppressMessages(library(xts))
 suppressMessages(library(raster))
 suppressMessages(library(dplyr))
@@ -25,25 +25,150 @@ suppressMessages(library(xtable))
 suppressMessages(library(ggrepel))
 suppressMessages(library(viridis))
 suppressMessages(library(gridExtra))
-library(sp)
+suppressMessages(library(sp))
+suppressMessages(library(sf))
+suppressMessages(library(lubridate))
+suppressMessages(library(dplyr))
+suppressMessages(library(chron))
+```
+Projections you may need: 
+```{r}
+merc <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+US_LCC <- "+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m no_defs"
 ```
 
-```{r}
-merc =  "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+Coordinate Reference Systems you may need:
+```{r, eval = FALSE}
 WGS84 <- 4326
 ```
 
-The newest GIS shapefile contains missing geometries for more than 30% of the tornadoes. The number of missing geometries is highest after 1995. Instead here we use the csv file from https://www.spc.noaa.gov/wcm/#data  Use the start lon/lat and create a `sp` object then convert to `sf`. Set the coordinate reference system (crs) to ESPG 4326.
-```{r}
-load("BigDays.RData")
-Tor.spdf <- as_Spatial(All_Tornadoes)
-Tor.sfdf <- st_as_sf(Tor.spdf)
-st_crs(Tor.sfdf) <- 4326
+
+Use the start lon/lat and create a `sp` object then convert to `sf`. Set the coordinate reference system (crs) to ESPG to `WGS84`.
+```{r, eval = FALSE}
+Torn50_19.spdf <- read.csv(file = "1950-2019_actual_tornadoes.csv")
+sp::coordinates(Torn50_19.spdf) <- ~ slon + slat
+Torn50_19.sfdf <- st_as_sf(Torn50_19.spdf)
+st_crs(Torn50_19.sfdf) <- WGS84
+```
+
+```{r, eval = FALSE}
+#Torn50_18.spdf <- read.csv(file = "1950-2018_actual_tornadoes.csv")
+#sp::coordinates(Torn50_18.spdf) <- ~ slon + slat
+#Torn50_18.sfdf <- st_as_sf(Torn50_18.spdf)
+#st_crs(Torn50_18.sfdf) <- WGS84
+```
+
+```{r, eval = FALSE}
+#timecheck <- Torn50_19.sfdf %>%
+#  filter(date == Torn50_18.sfdf$date && (Torn50_19.sfdf$time %in% Torn50_18.sfdf$time))
+```
+
+In the 2020 data, we can also use the start lat and lon to create an `sp` object. We then can convert it to `sf` data frame and set the coordinate reference system (crs) to EPSG 4326 [WGS 84]. However, we need to adjust the column headers of the 2020 tornado files to match those of the 1950 to 2019 data frame. 
+
+https://www.ncdc.noaa.gov/stormevents/choosedates.jsp?statefips=-999%2CALL
+https://www.ncdc.noaa.gov/stormevents/ftp.jsp
+Read the 2020 tornado data into R.
+```{r, eval = FALSE}
+Torn2020.spdf <-read.csv(file = "2020_TornadoData.csv")
+```
+
+The column headers do not match the 1950 to 2019 data frame. Therefore, you MUST rename the column headers before you can combine the data frames. Change the column names using the `colnames` function. 
+```{r, eval = FALSE}
+cols <- c("eventid", "county", "city", "date", "originaltime", "eventtype", "mag_NA", "mag", "fat", "inj", "loss", "closs", "st", "timezone", "magtype", "epiid", "cztype", "stf", "WFO", "injind", "fatind", "source", "floodcause", "len", "wid", "brange", "bazimuth", "erange", "eazimuth", "elocation", "slat", "slon", "elat", "elon", "eventnar", "episodenar", "om")
+colnames(Torn2020.spdf) <- cols
+```
+
+Convert to a spatial points data frame using the start latitude and longitude for each tornado. Next, convert to a simple features data frame with a set coordinate reference system to the WGS 84 (`EPSG: 4236`)
+```{r, eval = FALSE}
+sp::coordinates(Torn2020.spdf) <- ~ slon + slat
+Torn2020.sfdf <- st_as_sf(Torn2020.spdf)
+st_crs(Torn2020.sfdf) <- WGS84
+```
+
+Adjust the date and time columns. Add columns for day (dy), month (mo), year (yr), time(CST) 
+```{r, eval = FALSE}
+mydates <- as.Date(c(Torn2020.sfdf$date), format = "%m/%d/%Y")
+
+Torn2020.sfdf <-  Torn2020.sfdf %>%
+  mutate(yr = rep(2020, 1131),
+         dy = day(as.Date(c(date), format = "%m/%d/%Y")),
+         mo = month(as.Date(c(date), format = "%m/%d/%Y")),
+         mag = as.integer(substr(mag, 3,3)))
+```
+
+Convert times to the CST time zone. In the originaltime column, it has values of CST-6, EST-5, MST-7, and PST-8. Therefore, we create a `for` loop to convert these times to CST which is consistent with `Torn50_19.sfdf`.
+```{r, eval = FALSE}
+time <- c()
+date <- c()
+
+Torn2020.sfdf$date <- as.Date(Torn2020.sfdf$date, format = "%m/%d/%Y")
+
+for (i in 1:1131){
+  if(Torn2020.sfdf$timezone[i] == "CST-6") { 
+    time <- append(time,Torn2020.sfdf$originaltime[i])
+    date <- append(date, as.Date(Torn2020.sfdf$date[i]))
+    } else if(Torn2020.sfdf$timezone[i] == "EST-5") {
+    o_time <- ifelse((Torn2020.sfdf$originaltime[i] <= 100), (Torn2020.sfdf$originaltime[i] +1200-100), Torn2020.sfdf$originaltime[i] - 100)
+    newdate <- if(Torn2020.sfdf$originaltime[i] <= 100) {as.Date(Torn2020.sfdf$date[i], format = "%m/%d/%Y", origin = "0020/01/01")-1 } else { as.Date(Torn2020.sfdf$date[i], format = "%m/%d/%Y")
+    }
+    date <- append(date, newdate)
+    time <- append(time, (o_time))  
+    }   else if(Torn2020.sfdf$timezone[i] == "MST-7") {
+    o_time <- ifelse((Torn2020.sfdf$originaltime[i] >= 2300), (Torn2020.sfdf$originaltime[i]  - 2300), Torn2020.sfdf$originaltime[i] +100)
+    newdate <- if(Torn2020.sfdf$originaltime[i] >= 2300) {as.Date(Torn2020.sfdf$date[i], format = "%m/%d/%Y", origin = "0020/01/01")+1 } else { as.Date(Torn2020.sfdf$date[i], format = "%m/%d/%Y")
+    }
+    time <- append(time, Torn2020.sfdf$originaltime[i])
+    date <- append(date, as.Date(Torn2020.sfdf$date[i])) 
+    }    else if(Torn2020.sfdf$timezone[i] == "PST-8") {
+          o_time <- ifelse((Torn2020.sfdf$originaltime[i] >= 2200), (Torn2020.sfdf$originaltime[i]  - 2200), Torn2020.sfdf$originaltime[i] +200)
+    newdate <- if(Torn2020.sfdf$originaltime[i] >= 2200) {as.Date(Torn2020.sfdf$date[i], format = "%m/%d/%Y", origin = "0020/01/01")+1 } else { as.Date(Torn2020.sfdf$date[i], format = "%m/%d/%Y")
+      }
+    time <- append(time,(Torn2020.sfdf$originaltime[i]))
+    date <- append(date, as.Date(Torn2020.sfdf$date[i]))
+    } else ("NA")
+}
+
+time <- chron(times=time)
+time <- format(strptime(substr(as.POSIXct(sprintf("%04.0f", time), format="%H%M"), 12, 16), '%H:%M'), '%I:%M:%S %p')
+time <- format(strptime(time, "%I:%M:%S"), "%H:%M:%S")
+
+x<-as.POSIXct(time,format="%H:%M:%S")
+hour <- hour(x)
+tz <- rep(3, 1131)
+
+Torn2020.sfdf <- cbind(Torn2020.sfdf, time, hour, tz)
+```
+
+Determine the column names in the `Torn50_19.sfdf`. 
+```{r, eval = FALSE}
+colnames(Torn50_19.sfdf)
+```
+
+Determine the column names in the `Torn2020.sfdf`. 
+```{r, eval = FALSE}
+colnames(Torn2020.sfdf)
+```
+
+Filter the column names in the `Torn50_19.sfdf` and `Torn2020.sfdf`. You want both data frames to have the same columns.  
+```{r, eval = FALSE}
+filter_cols <- c("om","yr", "mo", "dy", "date", "time", "tz", "st", "stf", "mag","inj", "fat", "loss", "closs", "elat", "elon", "len", "wid", "geometry")
+
+Torn50_19.sfdf <-  Torn50_19.sfdf %>%
+  dplyr::select(filter_cols)
+
+Torn2020.sfdf <-  Torn2020.sfdf %>%
+  dplyr::select(filter_cols)
+#stn sn, ns, sg, f1m f2, f3, fc were removed from the 1950:2019 data file. 
+```
+
+Combine the 2020 and 1950 to 2019 data frames.
+```{r, eval = FALSE}
+Torn.sfdf <- as.data.frame(rbind(Torn50_19.sfdf, Torn2020.sfdf))
 ```
 
 Remove tornadoes in Hawaii, Alaska, and Puerto Rico and those occurring before 1994. That year marks the beginning of comprehensive WSR-88D radar. For missing EF ratings use the modification rules (if/else) defined here: https://www.spc.noaa.gov/wcm/OneTor_F-scale-modifications.pdf 
-```{r}
-All_Tornadoes <- Tor.sfdf %>%
+```{r, eval = FALSE}
+All_Tornadoes <- Torn.sfdf %>%
   filter(yr >= 1994,
          !st %in% c("AK", "PR", "HI")) %>%
   mutate(mag = ifelse(mag == -9 & len <= 5, 0, mag),
@@ -53,7 +178,7 @@ All_Tornadoes <- Tor.sfdf %>%
 Add a data/time column also add columns for path length, width, and area in metric units. Leave the time zone as native CDT. Create a convective day (6AM to 6AM) column taking hours 00:00:00 -> 05:59:59 and assigning it to the previous date (this associates the previous day's date to tornadoes occurring up to 6 hours after local midnight).
 ```{r, eval = FALSE}
 All_Tornadoes <- All_Tornadoes %>%
-  mutate(#dy = format(as.Date(date,format="%m/%d/%y"), "%d"),
+  mutate(#dy = format(as.Date(date,format="%y/%m/%d"), "%d"), #This is now an included column in data
          DateTime = as.POSIXct(paste(yr, mo, dy, time), format = "%Y%m%d%H:%M:%S"),
          Hour = hour(DateTime),
          Year = year(DateTime),
@@ -96,20 +221,15 @@ All_Tornadoes <- All_Tornadoes %>%
 ``` 
 
 Determine the distance between tornadoes in space and time. Use a projection, not lat/lon. See https://epsg.io/102004. Extract the coordinates of the start locations as a N by 2 matrix, where N is the number of tornadoes. Also extract the date-time as a vector of class `POSIXct`.
-```{r}
-All_Tornadoes <- st_set_crs(All_Tornadoes, 26919)
-st_crs(All_Tornadoes)
-All_Tornadoes <- st_transform(All_Tornadoes, 4326)
-st_crs(All_Tornadoes)
-
-
+```{r, eval = FALSE}
+All_Tornadoes <- st_transform(All_Tornadoes, crs = st_crs(US_LCC))
 space <- st_coordinates(All_Tornadoes)
 time <- All_Tornadoes$DateTime
 ```
 
 Next compute pairwise Euclidean distances in space and, separately, in time using the `dist()` function. Divide the spatial distance by 15 so that the values are commensurate with the time 'distance' based on the assumption of 15 meters per second (~34 mph) for an average speed of tornado-generating storms. Compare: Distance from New York to Denver is 2.622 x 10^6 meters. There are 3.154 x 10^7 seconds in a year. This will capture the historic multiday tornado outbreaks. For analysis we want to consider each day in the multiday group separately. As the value of the divisor increases cluster areas get larger. Remove `ds` and `dt` to free memory. Distances are saved as an object of class `dist` containing a vector of length N * (N-1)/2, which is the number of unique point pairs.
-```{r}
-ds <- dist(space) / 15
+```{r, eval = FALSE}
+ds <- (dist(space) / 15)
 dt <- dist(time)
 dst <- ds + dt
 rm(ds, dt)
@@ -122,21 +242,21 @@ Next group the tornadoes based on the space-time distances. This is done with th
 The single linkage method (`method = "single"`) is related to the minimal spanning tree (MST) and adopts a 'friends of friends' grouping strategy. An edge-weighted graph is a graph where each edge has a weight (or cost). Here weights are space-time distances between tornadoes. A MST of an edge-weighted graph is a spanning tree whose weight (the sum of the weights of its edges) is no larger than the weight of any other spanning tree. A spanning tree of a graph on N vertices (tornado centroids) is a subset of N-1 edges that form a tree (Skiena 1990, p. 227).
  
 The `cutree()` function is used to extract a group number for each tornado. Tornadoes in each group are close in space & time. Here the tree is cut at a height of 50000 space-time units. Making `h` smaller results in smaller groups (fewer tornadoes per group).
-```{r}
+```{r, eval = FALSE}
 stime <- proc.time()
-tree <- hclust(dst, method = "single".)
+tree <- hclust(dst, method = "single")
 groupNumber <- as.integer(cutree(tree, h = 50000))
 proc.time() - stime
 ```
 
 Add the group number to each tornado. 
-```{r}
+```{r, eval = FALSE}
 All_Tornadoes$groupNumber <- groupNumber
 ```
 
-Compute group-level statistics. Keep only tornado groups with at least 30 tornadoes.
-```{r}
-Groups.sfdfT <- All_Tornadoes %>%
+Compute group-level statistics. 
+```{r, eval = FALSE}
+LargeGroups1994_2020  <- All_Tornadoes %>%
   group_by(groupNumber) %>%
   summarize(Year = first(Year),
             Month = first(mo),
@@ -160,16 +280,14 @@ Groups.sfdfT <- All_Tornadoes %>%
             StartTime = first(DateTime),
             EndTime = last(DateTime),
             Duration = difftime(EndTime, StartTime, units = "secs"), 
-            cas = sum(inj + fat)) 
- Groups.sfdfT <- Groups.sfdfT %>% filter(nT >= 30)
-dim(Groups.sfdfT)
+            cas = sum(inj + fat)) %>% filter(nT >= 30)
 ```
 There are 6878 Groups and 180 large groups.
 
 Get the tornadoes that are in the 180 large groups. 
 ```{r}
-GroupTornadoes <- All_Tornadoes %>%
-  filter(groupNumber %in% Groups.sfdfT$groupNumber)
+LargeGroupTorns1994_2020 <- All_Tornadoes %>%
+  filter(groupNumber %in% LargeGroups1994_2020$groupNumber)
 ```
 
 ########################################
@@ -178,8 +296,8 @@ GroupTornadoes <- All_Tornadoes %>%
 
 Filter individual tornadoes to remove those that are not part of a large group. Group by group number and convective dates. Remove days within big groups (group days) having fewer than 10 tornadoes.
 ```{r}
-BigDays.sfdfT <- All_Tornadoes %>%
-  filter(groupNumber %in% Groups.sfdfT$groupNumber) %>%
+BigDaysLargeGroups1994_2020 <- All_Tornadoes %>%
+  filter(groupNumber %in% LargeGroups1994_2020$groupNumber) %>%
   group_by(groupNumber, cDate) %>%
   summarize(nT = n(),
             n0 = sum(mag == 0),
@@ -204,9 +322,17 @@ BigDays.sfdfT <- All_Tornadoes %>%
          Month = format(cDate, "%m"), # this is needed to preserve the leading zeros
          Day = format(cDate, "%d"), 
          ATP_TW = ATP/10^12)                                                                                      
-dim(BigDays.sfdfT)
+dim(BigDaysLargeGroups1994_2020)
 ```
 There are 245 big days in large groups. These will be used for further analysis and modeling.
+
+
+Get the tornadoes that are in the 180 large groups. 
+```{r}
+BigDayLargeGroupTorns1994_2020 <- All_Tornadoes %>%
+  filter(groupNumber %in% BigDaysLargeGroups1994_2020$groupNumber)
+```
+
 
 
 What is the percentage of all big days (>= 10 tornadoes) that occur within a big group?
@@ -216,9 +342,13 @@ TotalBigDays <- All_Tornadoes %>%
   summarize(nT = n()) %>%
   filter(nT >= 10)
 
-dim(BigDays.sfdfT)[1]/dim(TotalBigDays)[1] * 100
+dim(BigDaysLargeGroups1994_2020)[1]/dim(TotalBigDays)[1] * 100
 ```
 29.5% of all big days (>= 10 tornadoes) occur within a big group/outbreak (>= 30 tornadoes)
+
+
+
+########STOPHERE 
 
 Create a unique ID for each big day and each tornado. Extract the tornadoes associated with each big day using the unique ID. 
 ```{r}
@@ -266,20 +396,20 @@ MultidayGroups <- LargeGroups1994_2020 %>%
 ```
 
 ```{r}
-BigDayLargeGroups1994_2020 %>% 
+BigDaysLargeGroups1994_2020 %>% 
   arrange(desc(nT)) %>%
   head(10) %>%
   dplyr::select(cDate, nT, GroupDayCas)
 ``` 
 
 ```{r}
-max(BigDays1994_2020$nT)
+max(BigDaysLargeGroups1994_2020$nT)
 
-mean(BigDays1994_2020$nT)
+mean(BigDaysLargeGroups1994_2020$nT)
 ```
 
 ```{r}
-sum(BigDays1994_2020$nT <= 22) / dim(BigDays1994_2020)[1]
+sum(BigDaysLargeGroups1994_2020$nT <= 22) / dim(BigDaysLargeGroups1994_2020)[1]
 ```
 
 **Map of the longest tornado outbreak. Tornado points colored by cDate. **
@@ -298,8 +428,8 @@ longestdaytorns <- LargeGroupTorns1994_2020 %>%
 ```
 
 ```{r, eval = FALSE}
-states.sf <- us_states()
-counties.sf <- us_counties()
+sts <- state.name[!state.name %in% c("Alaska", "Hawaii")]
+stateBorders <- us_states(states = sts)
 
 longestdaytorns <- longestdaytorns %>%
   mutate(ID = as.factor(gsub("-", "", cDate)))
@@ -308,9 +438,6 @@ longestdaytorns$ID <- factor(longestdaytorns$ID, levels = rev(levels(longestdayt
 ```
 
 ```{r}
-sts <- state.name[!state.name %in% c("Alaska", "Hawaii")]
-stateBorders <- us_states(states = sts)
-
 tm_shape(stateBorders) + 
   tm_borders(col = "gray70") +
   tm_layout(legend.bg.color = "white", legend.text.size = .75) +
