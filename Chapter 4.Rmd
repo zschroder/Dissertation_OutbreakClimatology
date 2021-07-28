@@ -337,12 +337,12 @@ BigDayLargeGroupTorns1994_2020 <- All_Tornadoes %>%
 
 What is the percentage of all big days (>= 10 tornadoes) that occur within a big group?
 ```{r}
-TotalBigDays <- All_Tornadoes %>%
+BigDays1994_2020 <- All_Tornadoes %>%
   group_by(groupNumber, cDate) %>%
   summarize(nT = n()) %>%
   filter(nT >= 10)
 
-dim(BigDaysLargeGroups1994_2020)[1]/dim(TotalBigDays)[1] * 100
+dim(BigDaysLargeGroups1994_2020)[1]/dim(BigDays1994_2020)[1] * 100
 ```
 29.5% of all big days (>= 10 tornadoes) occur within a big group/outbreak (>= 30 tornadoes)
 
@@ -351,35 +351,22 @@ dim(BigDaysLargeGroups1994_2020)[1]/dim(TotalBigDays)[1] * 100
 ########STOPHERE 
 
 Create a unique ID for each big day and each tornado. Extract the tornadoes associated with each big day using the unique ID. 
-```{r}
-BigDayTornadoes <- All_Tornadoes %>%
+```{r, eval = FALSE}
+BigDayTorns1994_2020 <- All_Tornadoes %>%
    mutate(ID = paste0(gsub("-", "", cDate), groupNumber))
-BigDays.sfdfT <- BigDays.sfdfT %>%
+BigDays1994_2020 <- BigDays1994_2020 %>%
    mutate(ID = paste0(gsub("-", "", cDate), groupNumber))
 
-BigDayTornadoes <- BigDayTornadoes %>%
-  filter(ID %in% BigDays.sfdfT$ID)
+BigDayTorns1994_2020 <- BigDayTorns1994_2020 %>%
+  filter(ID %in% BigDays1994_2020$ID)
 
-sum(BigDays.sfdfT$nT)
-```
-Rename: 
-```{r}
-BigDayLargeGroups1994_2020 <- BigDays.sfdfT
-LargeGroups1994_2020 <- Groups.sfdfT
-BigDayLargeGroupsTorns1994_2020 <- BigDayTornadoes
-LargeGroupTorns1994_2020 <-GroupTornadoes
-```
-
-```{r}
-load("BigDays.RData")
-
-BigDays1994_2020 <- BigDays.sfdfT
-BigDayTorns1994_2020 <- BigDayTornadoes
+sum(BigDays1994_2020$nT)
 ```
 
 
+
 ```{r}
-#save("BigDayLargeGroups1994_2020", "BigDayLargeGroupsTorns1994_2020", "LargeGroups1994_2020", "LargeGroupTorns1994_2020", "BigDays1994_2020", "BigDayTorns1994_2020", file = "BigDays1994_2020.RData" )
+#save("All_Tornadoes", "BigDaysLargeGroups1994_2020", "BigDayLargeGroupTorns1994_2020", "LargeGroups1994_2020", "LargeGroupTorns1994_2020", "BigDays1994_2020", "BigDayTorns1994_2020", file = "BigDays1994_2020.RData" )
 
 load("BigDays1994_2020.RData")
 ```
