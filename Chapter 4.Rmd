@@ -285,7 +285,7 @@ LargeGroups1994_2020  <- All_Tornadoes %>%
 There are 6878 Groups and 180 large groups.
 
 Get the tornadoes that are in the 180 large groups. 
-```{r}
+```{r, eval = FALSE}
 LargeGroupTorns1994_2020 <- All_Tornadoes %>%
   filter(groupNumber %in% LargeGroups1994_2020$groupNumber)
 ```
@@ -295,7 +295,7 @@ LargeGroupTorns1994_2020 <- All_Tornadoes %>%
 ########################################
 
 Filter individual tornadoes to remove those that are not part of a large group. Group by group number and convective dates. Remove days within big groups (group days) having fewer than 10 tornadoes.
-```{r}
+```{r, eval = FALSE}
 BigDaysLargeGroups1994_2020 <- All_Tornadoes %>%
   filter(groupNumber %in% LargeGroups1994_2020$groupNumber) %>%
   group_by(groupNumber, cDate) %>%
@@ -328,7 +328,7 @@ There are 245 big days in large groups. These will be used for further analysis 
 
 
 Get the tornadoes that are in the 180 large groups. 
-```{r}
+```{r, eval = FALSE}
 BigDayLargeGroupTorns1994_2020 <- All_Tornadoes %>%
   filter(groupNumber %in% BigDaysLargeGroups1994_2020$groupNumber)
 ```
@@ -336,7 +336,7 @@ BigDayLargeGroupTorns1994_2020 <- All_Tornadoes %>%
 
 
 What is the percentage of all big days (>= 10 tornadoes) that occur within a big group?
-```{r}
+```{r, eval = FALSE}
 BigDays1994_2020 <- All_Tornadoes %>%
   group_by(groupNumber, cDate) %>%
   summarize(nT = n()) %>%
@@ -345,10 +345,6 @@ BigDays1994_2020 <- All_Tornadoes %>%
 dim(BigDaysLargeGroups1994_2020)[1]/dim(BigDays1994_2020)[1] * 100
 ```
 29.5% of all big days (>= 10 tornadoes) occur within a big group/outbreak (>= 30 tornadoes)
-
-
-
-########STOPHERE 
 
 Create a unique ID for each big day and each tornado. Extract the tornadoes associated with each big day using the unique ID. 
 ```{r, eval = FALSE}
@@ -363,7 +359,11 @@ BigDayTorns1994_2020 <- BigDayTorns1994_2020 %>%
 sum(BigDays1994_2020$nT)
 ```
 
-
+Obtain the group day hulls. Transform the CRS to match that of the environmental data raster grids.
+```{r, eval = FALSE}
+BigDays1994_2020 <- st_convex_hull(BigDays1994_2020)
+BigDays1994_2020$HullArea <- st_area(BigDays1994_2020)
+```
 
 ```{r}
 #save("All_Tornadoes", "BigDaysLargeGroups1994_2020", "BigDayLargeGroupTorns1994_2020", "LargeGroups1994_2020", "LargeGroupTorns1994_2020", "BigDays1994_2020", "BigDayTorns1994_2020", file = "BigDays1994_2020.RData" )
@@ -407,7 +407,7 @@ longestgroup <- LargeGroups1994_2020 %>%
 
 longestgroup <- st_convex_hull(longestgroup)
 
-#longestdays <- BigDays.sfdfT %>%
+#longestdays <- BigDays1994_2020 %>%
  # filter(groupNumber == 3075)
 
 longestdaytorns <- LargeGroupTorns1994_2020 %>%
@@ -425,6 +425,15 @@ longestdaytorns$ID <- factor(longestdaytorns$ID, levels = rev(levels(longestdayt
 ```
 
 ```{r}
+library(RColorBrewer)
+mypalette <- brewer.pal(name = "Greys", n =9)
+mypalette <- rev(mypalette[3:8])
+```
+
+
+```{r}
+longestdaytorns$dy2 <- cut(longestdaytorns$dy, breaks=c(4,5,6,7,8))
+
 tm_shape(stateBorders) + 
   tm_borders(col = "gray70") +
   tm_layout(legend.bg.color = "white", legend.text.size = .75) +
@@ -440,14 +449,338 @@ tm_shape(longestgroup, merc, is.master = TRUE) +
                    #title = "Longest Group of Tornadoes",
                    #title.size = 1.3,
                    #title.position = c("left", "TOP"),
-                   inner.margins = c(.05, .2, .05, .2)) + #.15S, .15W, .1,N .2 E
+                   inner.margins = c(.05, .3, .05, .3)) + #.15S, .15W, .1,N .2 E
   tm_layout(legend.bg.color = "white", legend.text.size = .5) +
 tm_shape(longestdaytorns) +
-  tm_symbols(size = 4, alpha = 0.8, col = "ID", n = 5, palette = "seq", title.col = "September", labels = c("8th", "7th", "6th", "5th", "4th"), border.alpha = 0) + 
+  tm_symbols(size = 4, alpha = 0.8, col = "dy", n = 5, palette = "seq", title.col = "September", labels = c("4th", "5th", "6th", "7th", "8th"), border.alpha = 0) + 
   tm_layout(legend.title.size = 1.1,
+            legend.position = c("left", "bottom"), 
+            legend.stack = "horizontal",
+            legend.frame = FALSE,
+            legend.text.size = 1, legend.width = -0.3, aes.palette = list(seq = rev(mypalette)))
+```
+`Figure: A cluster of tornadoes in 2004 that occurred between September 4th and 8th. Each circle is a tornado genesis location colored by the day of occurrence. The black line is the minimum convex polygon surrounding all the genesis locations (convex hull)`  #CORRECT
+
+**Extract the geographic centroids of tornado genesis on big tornado days by creating an `sf` object using `st_centroid()` that reduces the MULTIPOINT geometry to a POINT geometry. Compute the area of the group and the number of tornadoes per area (density).**
+```{r}
+groupDayCentroids1994_2020 <- st_centroid(BigDays1994_2020)
+groupDayCentroids1994_2020$groupArea <- st_area(st_convex_hull(BigDays1994_2020))
+groupDayCentroids1994_2020$groupDensity <- groupDayCentroids1994_2020$nT/groupDayCentroids1994_2020$groupArea
+```
+
+*Extract the Hull, centroids, and tornadoes for the May 30, 2004 big day. *
+
+```{r, eval = FALSE}
+May30 <- BigDays1994_2020 %>%
+  filter(cDate == "2004-05-30")
+May30 <- st_convex_hull(May30)
+
+May30centroid <- groupDayCentroids1994_2020 %>%
+  filter(cDate == "2004-05-30")
+
+May30tornadoes <- BigDayTorns1994_2020 %>% 
+  filter(groupNumber == May30centroid$groupNumber)
+
+May30tornadoes <- May30tornadoes %>%
+  mutate(Hour2 = ifelse(Hour <= 6, Hour + 24, Hour))
+```
+
+**Make a map of the May 30 tornado day. Obtain the state and county boundaries from the `USAboundaries` package. **
+```{r, eval = FALSE}
+mypalette2 <- rev(mypalette[2:5])
+
+May30tornadoes$Hour2 <- cut(May30tornadoes$Hour2, breaks=c(6,12,18,24,30))
+
+tm_shape(stateBorders) + 
+  tm_borders(col = "gray70", alpha = 1) +
+  tm_scale_bar(width = .3, size = 0.8, lwd = 1.75, color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+  tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75, 
+            attr.position = c("right", "top"), 
+            inner.margins = c(.15, .15, .1, .2)) +
+#tm_shape(counties.sf) +
+#  tm_borders(col = "gray40", alpha = .3) +
+#  tm_scale_bar(width = 8, size = 8, color.dark = "gray70") +
+  #tm_format("World", legend.position = c("right", "top"),
+#                   attr.position = c("right", "top"),
+#                   legend.frame = FALSE,
+                   #title = "May 30th Tornado Group",
+                   #title.size = 1.3,
+                   #title.position = c("left", "TOP"),
+ #                  inner.margins = c(.2, .2, .2, .2)) +
+tm_shape(May30, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3) +
+tm_shape(May30tornadoes) +
+  tm_symbols(size = 4, col = "Hour2", alpha = 0.8, palette = mypalette2, title.col = "Time [CST]", labels = c("6 to 12", "12 to 18", "18 to 24", "0 to 6"), border.alpha = 0) +
+    tm_layout(legend.title.size = 1.2,
             legend.position = c("right", "bottom"), 
             legend.stack = "horizontal",
             legend.frame = FALSE, 
-            legend.text.size = 1, legend.width = -0.3, aes.palette = list(seq = "-Greys"))
+            legend.text.size = 1, legend.width = -0.2)
 ```
-`Figure: A cluster of tornadoes in 2004 that occurred between September 4th and 8th. Each circle is a tornado genesis location colored by the day of occurrence. The black line is the minimum convex polygon surrounding all the genesis locations (convex hull)`  #CORRECT
+
+# Make a color ramp for Intensity
+
+```{r}
+YtoR <- RColorBrewer::brewer.pal(9, "YlOrRd")
+YtoR <- YtoR[-c(1:2,9)]
+```
+
+
+```{r}
+#Extract the big day using the unique ID created.
+cluster1 <- BigDays1994_2020 %>%
+  filter(ID == 19940719217)
+
+#Generate a convex hull around the cluster.
+cluster1 <- st_convex_hull(cluster1)
+
+#Extract all tornadoes that are in the Day 1
+
+cluster1torns <- BigDayTorns1994_2020 %>%
+  filter(ID == 19940719217)
+
+cluster1torns$mag <- as.numeric(cluster1torns$mag)
+cluster1torns$mag2 <- cut(cluster1torns$mag, breaks=c(-1, 0, 1, 2, 3, 4, 5))
+```
+
+```{r}
+A <- tm_shape(stateBorders) + 
+  tm_borders(col = "gray70") +
+tm_shape(cluster1) + 
+  tm_borders(col = "gray15", 
+             alpha = 1, 
+             lwd = 2) +
+  tm_scale_bar(color.dark = "gray70", 
+               width = .3, 
+               size = 1, 
+               lwd = 2, 
+               position = c("left","bottom")) +
+    tm_compass(color.dark = "gray70", 
+             size = 5, 
+             lwd = 2, 
+             position = c("left","top")) + 
+    tm_format("World", 
+              attr.position = c("left", "top"),
+              legend.frame = FALSE,
+              inner.margins = c(.25, .2, .2, .2)) +
+    tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75) + 
+  tm_shape(cluster1torns, 
+         projection = merc, 
+         is.master = TRUE) +
+    tm_symbols(size = 3, 
+               col = "mag2", 
+               n = 6, 
+               palette = YtoR, 
+               alpha = 0.7, 
+               border.alpha = 0, 
+               labels = c("0", "1", "2", "3", "4", "5"), 
+               title.col = "EF Rating") +
+    tm_layout(title = "July 19, 1994 \n 10 tornadoes", 
+              title.position = c("center", "top"), 
+              legend.title.size = 1.4,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1.2, 
+              legend.width = -0.2, 
+              title.size = 1.5)
+A  
+```
+
+```{r}
+cluster2 <- BigDays1994_2020 %>%
+  filter(ID == 199906061644)
+
+cluster2 <- st_convex_hull(cluster2)
+
+cluster2torns <- BigDayTorns1994_2020 %>%
+  filter(ID == 199906061644) 
+
+cluster2 %>%
+  summarize(Area = HullArea/(10**6),
+            Duration = Duration/3600)
+
+cluster2torns$mag <- as.numeric(cluster2torns$mag)
+cluster2torns$mag2 <- cut(cluster2torns$mag, breaks=c(-1, 0, 1, 2, 3, 4, 5))
+```
+
+```{r}
+B <- tm_shape(stateBorders) + 
+  tm_borders(col = "gray70") +
+tm_shape(cluster2) + 
+  tm_borders(col = "gray15", 
+             alpha = 1, 
+             lwd = 2) +
+  tm_scale_bar(color.dark = "gray70", 
+               width = .2, 
+               size = 1, 
+               lwd = 2, 
+               position = c("left","bottom")) +
+    tm_compass(color.dark = "gray70", 
+             size = 5, 
+             lwd = 2, 
+             position = c("left","top")) + 
+    tm_format("World", 
+              attr.position = c("left", "top"),
+              legend.frame = FALSE,
+              inner.margins = c(.15, .15, .15, .25)) +
+    tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75) + 
+  tm_shape(cluster2torns, 
+         projection = merc, 
+         is.master = TRUE) +
+    tm_symbols(size = 3, 
+               col = "mag2", 
+               n = 6, 
+               palette = YtoR, 
+               alpha = 0.7, 
+               border.alpha = 0, 
+               labels = c("0", "1", "2", "3", "4", "5"), 
+               title.col = "EF Rating") +
+    tm_layout(title = "June 6, 1999 \n 36 tornadoes", 
+              title.position = c("center", "top"), 
+              legend.title.size = 1.4,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1.2, 
+              legend.width = -0.15, 
+              title.size = 1.5)
+  B
+```
+
+```{r}
+cluster3 <- BigDays1994_2020 %>%
+  filter(ID == 200802053876)
+
+cluster3 <- st_convex_hull(cluster3)
+
+cluster3torns <- BigDayTorns1994_2020 %>%
+  filter(ID == 200802053876) 
+
+cluster3 %>%
+  summarize(Area = HullArea/(10**6),
+            Duration = Duration/3600)
+
+cluster3torns$mag <- as.numeric(cluster3torns$mag)
+cluster3torns$mag2 <- cut(cluster3torns$mag, breaks=c(-1, 0, 1, 2, 3, 4, 5))
+```
+
+```{r}
+C <- tm_shape(stateBorders) + 
+  tm_borders(col = "gray70") +
+tm_shape(cluster3) + 
+  tm_borders(col = "gray15", 
+             alpha = 1, 
+             lwd = 2) +
+  tm_scale_bar(color.dark = "gray70", 
+               width = .3, 
+               size = 1, 
+               lwd = 2, 
+               position = c("left","bottom")) +
+    tm_compass(color.dark = "gray70", 
+             size = 5, 
+             lwd = 2, 
+             position = c("left","top")) + 
+    tm_format("World", 
+              attr.position = c("left", "top"),
+              legend.frame = FALSE,
+              inner.margins = c(.1, .1, .2, .1)) +
+    tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75) + 
+  tm_shape(cluster3torns, 
+         projection = merc, 
+         is.master = TRUE) +
+    tm_symbols(size = 3, 
+               col = "mag2", 
+               n = 6, 
+               palette = YtoR, 
+               alpha = 0.7, 
+               border.alpha = 0, 
+               labels = c("0", "1", "2", "3", "4", "5"), 
+               title.col = "EF Rating") +
+    tm_layout(title = "February 5, 2008 \n 85 tornadoes", 
+              title.position = c("center", "top"), 
+              legend.title.size = 1.4,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1.2, 
+              legend.width = -0.2, 
+              title.size = 1.5)
+C  
+```
+
+```{r}
+#Extract the big day using the unique ID created. 
+cluster4 <- BigDays1994_2020 %>%
+  filter(ID == 201104274630)
+
+#Generate a convex hull around the big day. 
+cluster4 <- st_convex_hull(cluster4)
+
+#Extract all tornadoes that are in the biggestday 
+cluster4torns <- BigDayTorns1994_2020 %>%
+  filter(ID == 201104274630) 
+
+cluster4 %>%
+  summarize(Area = HullArea/(10**6),
+            Duration = Duration/3600)
+
+cluster4torns$mag <- as.numeric(cluster4torns$mag)
+cluster4torns$mag2 <- cut(cluster4torns$mag, breaks=c(-1, 0, 1, 2, 3, 4, 5))
+```
+
+```{r}
+D <- tm_shape(stateBorders) + 
+  tm_borders(col = "gray70") +
+tm_shape(cluster4,projection = merc) + 
+  tm_borders(col = "gray15", 
+             alpha = 1, 
+             lwd = 2) +
+  tm_scale_bar(color.dark = "gray70", 
+               width = .3, 
+               size = 1, 
+               lwd = 2, 
+               position = c("left","bottom")) +
+    tm_compass(color.dark = "gray70", 
+             size = 5, 
+             lwd = 2, 
+             position = c("left","top")) + 
+    tm_format("World", 
+              attr.position = c("left", "top"),
+              legend.frame = FALSE,
+              inner.margins = c(.15, .1, .2, .1)) +
+    tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75) + 
+  tm_shape(cluster4torns, 
+         projection = merc, 
+         is.master = TRUE) +
+    tm_symbols(size = 3, 
+               col = "mag2", 
+               n = 6, 
+               palette = YtoR, 
+               alpha = 0.7, 
+               border.alpha = 0, 
+               labels = c("0", "1", "2", "3", "4", "5"), 
+               title.col = "EF Rating") +
+    tm_layout(title = "April 27, 2011 \n 173 tornadoes", 
+              title.position = c("center", "top"), 
+              legend.title.size = 1.4,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1.2, 
+              legend.width = -0.2, 
+              title.size = 1.5)
+  
+D
+```
+
+```{r}
+tmap_arrange(A, B, C, D, ncol = 2, nrow = 2)
+```
+`Figure 1: ` \label{fig:Clusters}
