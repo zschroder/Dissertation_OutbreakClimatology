@@ -3,5 +3,441 @@ title: "Geography of Tornadoes"
 author: "Professor Zoe Schroder"
 date: "7/28/2021"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
+## Part 1: Tornado data
+
+Load packages and suppress the messages of the packages. 
+```{r}
+suppressMessages(library(lubridate))
+suppressMessages(library(tmap))
+suppressMessages(library(USAboundaries))
+suppressMessages(library(rgeos))
+suppressMessages(library(dplyr))
+suppressMessages(library(xts))
+suppressMessages(library(raster))
+suppressMessages(library(dplyr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(lme4))
+suppressMessages(library(xtable))
+suppressMessages(library(ggrepel))
+suppressMessages(library(viridis))
+suppressMessages(library(gridExtra))
+suppressMessages(library(sp))
+suppressMessages(library(sf))
+suppressMessages(library(lubridate))
+suppressMessages(library(dplyr))
+suppressMessages(library(chron))
+```
+Projections you may need: 
+```{r}
+merc <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+US_LCC <- "+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m no_defs"
+```
+
+Coordinate Reference Systems you may need:
+```{r, eval = FALSE}
+WGS84 <- 4326
+```
+
+Load the data: 
+```{r}
+load("BigDays1994_2020.RData")
+```
+
+```{r}
+sts <- state.name[!state.name %in% c("Alaska", "Hawaii")]
+stateBorders <- us_states(states = sts)
+```
+
+
+
+CSST and GAKSST
+```{r}
+CSST_xcoord <- c(-90, -70, -70, -90)
+CSST_ycoord <- c(15, 15, 25, 25)
+xym <- cbind(CSST_xcoord, CSST_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+CSST_sp = SpatialPolygons(list(ps))
+plot(CSST_sp)
+
+GAKSST_xcoord <- c(-157.5,-133.1,-133.1,-157.5)
+GAKSST_ycoord <- c(50.5, 50.5, 60, 60)
+xym <- cbind(GAKSST_xcoord, GAKSST_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+GAKSST_sp = SpatialPolygons(list(ps))
+plot(GAKSST_sp)
+
+NINO_xcoord <- c(-170, -120, -120, -170)
+NINO_ycoord <- c(-5, -5, 5, 5)
+xym <- cbind(NINO_xcoord, NINO_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+NINO_sp = SpatialPolygons(list(ps))
+plot(NINO_sp)
+
+MyBorders_x <- c(-180, -60, -60, -180)
+MyBorders_y <- c(-10, -10, 70, 70)
+xym <- cbind(MyBorders_x, MyBorders_y)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+MyBorders_sp = SpatialPolygons(list(ps))
+plot(MyBorders_sp)
+```
+
+```{r}
+data("World")
+
+West_Hemisphere <- World %>%
+  filter(continent %in% c("North America", "South America"))
+
+SSTmap <- tm_shape(World, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "gray70", alpha = 1) +
+ tm_shape(MyBorders_sp, is.master = TRUE, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(alpha = 0, border.alpha = 0)+ 
+tm_shape(CSST_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "blue", alpha = 0.6)+
+tm_shape(GAKSST_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "darkgreen", alpha = 0.6, legend.show = TRUE)+
+tm_shape(NINO_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "goldenrod2", alpha = 0.6, legend.show = TRUE) +
+tm_shape(stateBorders) + 
+  tm_borders(col = "gray40", alpha = 1) +
+  tm_compass(size = 2, fontsize = 1, lwd = 2, color.dark = "gray70") +       
+  tm_scale_bar(width = .3, size = 0.8, lwd = 1.75, color.dark = "gray70") +
+  tm_add_legend(type = "symbol", labels = c("Caribbean SST Zone", "Gulf of Alaska SST Zone", "Nino 3.4 SST Zone"), col = c("blue", "darkgreen", "goldenrod2"), size = 2, shape = 22, alpha = 0.6) +
+  tm_layout(title = "Sea Surface Temperatures",
+            title.bg.color = "white",
+            title.size = 1.2, 
+            legend.bg.color = "white", 
+            legend.text.size = .7, 
+            attr.position = c("left", "bottom"),
+            legend.position = c("right", "bottom"),
+            legend.stack = "horizontal",
+            inner.margins = c(0.3,0.05,0,0))
+SSTmap
+```
+
+NAO locations: 
+```{r}
+NAO_xcoord <- c(-70, -10, -10, -70)
+NAO_ycoord <- c(55, 55, 70, 70)
+xym <- cbind(NAO_xcoord, NAO_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+NAO_sp = SpatialPolygons(list(ps))
+plot(NAO_sp)
+
+NAO2_xcoord <- c(-70,-10,-10,-70)
+NAO2_ycoord <- c(35, 35, 45, 45)
+xym <- cbind(NAO2_xcoord, NAO2_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+NAO2_sp = SpatialPolygons(list(ps))
+plot(NAO2_sp)
+
+
+MyBorders_x <- c(-80, -5, -5, -80)
+MyBorders_y <- c(30, 30, 75, 75)
+xym <- cbind(MyBorders_x, MyBorders_y)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+MyBorders_sp = SpatialPolygons(list(ps))
+plot(MyBorders_sp)
+```
+
+```{r}
+data("World")
+
+West_Hemisphere <- World %>%
+  filter(continent %in% c("North America", "South America"))
+
+NAOmap <- tm_shape(World, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "gray70", alpha = 1) +
+ tm_shape(MyBorders_sp, is.master = TRUE, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(alpha = 0, border.alpha = 0)+ 
+tm_shape(NAO_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "blue", alpha = 0.6)+
+tm_shape(NAO2_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "darkgreen", alpha = 0.6, legend.show = TRUE)+
+tm_shape(stateBorders) + 
+  tm_borders(col = "gray40", alpha = 1) +
+  tm_compass(size = 2, fontsize = 1, lwd = 2, color.dark = "gray70", bg.color = "white") +       
+  tm_scale_bar(width = .35, size = 0.8, lwd = 1.9, color.dark = "gray70", bg.color = "white") +
+  tm_add_legend(type = "symbol", labels = c("Icelandic Low", "Azores High"), col = c("blue", "darkgreen"), size = 2, shape = 22, alpha = 0.6) +
+  tm_layout(title = "North Atlantic Oscillation", 
+            title.size = 1.2, 
+            title.bg.color = "white",
+            legend.bg.color = "white", 
+            legend.text.size = .7, 
+            attr.position = c("right", "bottom"),
+            legend.position = c("left", "bottom"),
+            legend.stack = "horizontal",
+            inner.margins = c(0.25,0.05,0.05,0))
+```
+
+PNA Locations: 
+
+```{r}
+PNA_xcoord <- c(-180, -140, -140, -180)
+PNA_ycoord <- c(15, 15, 25, 25)
+xym <- cbind(PNA_xcoord, PNA_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+PNA_sp = SpatialPolygons(list(ps))
+plot(PNA_sp)
+
+PNA2_xcoord <- c(-180, -140, -140, -180)
+PNA2_ycoord <- c(40, 40, 50, 50)
+xym <- cbind(PNA2_xcoord, PNA2_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+PNA2_sp = SpatialPolygons(list(ps))
+plot(PNA2_sp)
+
+PNA3_xcoord <- c(-90, -70, -70, -90)
+PNA3_ycoord <- c(25, 25, 35, 35)
+xym <- cbind(PNA3_xcoord, PNA3_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+PNA3_sp = SpatialPolygons(list(ps))
+plot(PNA3_sp)
+
+PNA4_xcoord <- c(-125, -105, -105, -125)
+PNA4_ycoord <- c(45, 45, 60, 60)
+xym <- cbind(PNA4_xcoord, PNA4_ycoord)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+PNA4_sp = SpatialPolygons(list(ps))
+plot(PNA4_sp)
+
+
+
+MyBorders_x <- c(-180, -65, -65, -180)
+MyBorders_y <- c(10, 10, 65, 65)
+xym <- cbind(MyBorders_x, MyBorders_y)
+
+p = Polygon(xym)
+ps = Polygons(list(p),1)
+MyBorders_sp = SpatialPolygons(list(ps))
+plot(MyBorders_sp)
+```
+
+```{r}
+data("World")
+
+West_Hemisphere <- World %>%
+  filter(continent %in% c("North America", "South America"))
+
+PNAmap <- tm_shape(World, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "gray70", alpha = 1) +
+ tm_shape(MyBorders_sp, is.master = TRUE, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(alpha = 0, border.alpha = 0)+ 
+tm_shape(PNA_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "maroon1", alpha = 0.6)+
+tm_shape(PNA2_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "maroon1", alpha = 0.6, legend.show = TRUE)+
+tm_shape(PNA3_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "goldenrod2", alpha = 0.7, legend.show = TRUE)+
+  tm_shape(PNA4_sp, projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs") + 
+  tm_polygons(col = "goldenrod2", alpha = 0.7, legend.show = TRUE)+
+tm_shape(stateBorders) + 
+  tm_borders(col = "gray40", alpha = 1) +
+  tm_compass(size = 1.5, fontsize = 1, lwd = 2, color.dark = "gray70") +       
+  tm_scale_bar(width = .3, size = 0.8, lwd = 1.75, color.dark = "gray70") +
+  tm_add_legend(type = "symbol", labels = c("Pacific Height Regions", "North American Height Regions"), col = c("maroon1", "goldenrod2"), size = 2, shape = 22, alpha = 0.7) +
+  tm_layout(title = "Pacific North Atlantic",
+            title.size = 1.2,
+            title.bg.color = "white",
+            legend.width = 0.7,
+            legend.bg.color = "white", 
+            legend.text.size = .75, 
+            attr.position = c("left", "bottom"),
+            legend.position = c("right", "bottom"),
+            legend.stack = "horizontal",
+            inner.margins = c(0.220,0.05,0,0.1))
+PNAmap
+```
+
+```{r}
+tmap_arrange(SSTmap, NAOmap, PNAmap, ncol = 2)
+```
+
+Spatial Density
+```{r}
+Torn.sf <- as.data.frame(All_Tornadoes)
+
+Torn.sf <- Torn.sf %>%
+  filter(yr >= 1994, 
+         !st %in% c("AK", "PR", "HI"))%>%
+  mutate(cas = fat + inj,
+         positive_slon = slon * -1, 
+         lat = slat,
+         long = slon)
+
+#devtools::install_github('oswaldosantos/ggsn')
+library(ggsn)
+library(ggspatial)
+library(hexbin)
+
+
+g <- ggplot(Torn.sf, aes(x = slon, y = slat)) +
+  geom_hex(bins = 50) +
+  scale_fill_continuous(type = "viridis", name = "Counts") +
+  borders("state", region = c(stateBorders$state_name), col = "gray70") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5), labels = c("130", "120", "110", "100", "90", "80", "70", "60")) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 6)) +
+  theme_bw() +
+  xlab(expression(paste('Longitude (',~degree,'W)',sep=''))) +
+  ylab(expression(paste('Latitude (',~degree,'N)',sep=''))) 
+
+g + annotation_north_arrow(which_north = "grid",   
+                           height = unit(1.5, "cm"),
+                          width = unit(1, "cm"),
+                          pad_x = unit(2, "cm"),
+                          pad_y = unit(2, "cm"),
+                          style = north_arrow_orienteering()) +      
+    scalebar(Torn.sf, dist = 500, 
+             dist_unit = "km",
+             transform = TRUE, 
+             model = "WGS84", 
+            location = c("bottomleft"))+  
+    theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=16, face="bold"), 
+        legend.position = c(0.9, 0.2),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12))
+
+
+```
+
+# Monthly and Yearly Variation
+
+*Year*
+```{r}
+TornsbyYear <- All_Tornadoes %>% 
+  group_by(year = yr) %>%
+  summarize(totaltornadoes = n())
+```
+
+`Get the week labels for the data`
+```{r}
+x.Date <- as.Date(paste(rep(1994:2020, each = 12), rep(1:12, 2), 1, sep = "-"))
+library(zoo)
+x <- zoo(rnorm(24), x.Date)
+times <- time(x)
+ticks <- as.data.frame(x = seq(times[1], times[length(times)], by = "weeks"))
+
+week <- as.data.frame(ticks[1:53,])
+  
+months <- as.data.frame(format(week, "%b"))
+Mo <- as.data.frame(format(week, "%m"))
+day <- as.data.frame(format(week, "%d"))
+
+dat <- as.data.frame(cbind(week, Mo, months, day))
+colnames(dat) <- c("Week", "Mo", "Month", "Day") 
+
+dat <- dat %>%
+  group_by(Month, Day, Mo) %>%
+  summarize(count = n(),
+            Week = paste0(Month, " ", Day))
+
+dat <- dat[order(dat$Mo),]
+```
+
+Make a figure of the change in tornadoes per annum. 
+
+```{r}
+yeargraph <- ggplot(TornsbyYear, (aes(x = year, y = totaltornadoes))) +
+  geom_smooth(method = lm, span = .5, se = FALSE, color = "red2", size = 1) +
+  geom_line(color = "black", lwd = 1) +
+  scale_x_continuous(expand = c(0, 0), breaks = c(seq(1994,2020,1))) +
+  scale_y_continuous(limits = c(800, 2000), breaks = c(seq(800,2000,150))) + 
+#  geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  theme_bw() +
+  xlab("Year") +
+  ylab("Number of Tornadoes\n ")
+
+yeargraph <- yeargraph + theme(axis.title.y = element_text(colour = "black"), axis.text.y = element_text(color = "black"),  axis.text.x = element_text(angle = 45, hjust = 1), axis.text = element_text(size = 12), axis.title=element_text(size=14))
+
+yeargraph
+```
+
+*Month*
+```{r}
+TornsByMonth <- All_Tornadoes %>% 
+  group_by(mo) %>%
+  summarize(totaltornadoes = n()) 
+```
+
+`Make a figure of the total tornadoes from 1994 to 2020 by month`
+```{r}
+ggplot(TornsByMonth, aes(x = as.factor(mo), y = totaltornadoes)) +
+  geom_bar(stat = "identity", fill = "gray70") +
+  scale_x_discrete(labels = month.name) +
+  scale_y_continuous(limits = c(0, NA)) +
+  ylab("Number of Tornado Groups\nWith At Least 10 Tornadoes") + xlab("") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+( p0 <- ggplot(TornsByMonth, aes(x = mo, y = totaltornadoes)) +
+  geom_bar(stat = "identity", fill = "gray70") +
+  scale_x_continuous(breaks = seq(1, 12, 1), labels = month.abb) +
+  scale_y_continuous(limits = c(0, 8000)) +
+  coord_polar(start = 0) +
+  labs(x = "Month", y = "Number of Tornadoes") +
+  theme_minimal() )
+```
+
+## Daily (hourly) variation in tornado activity
+
+```{r}
+TornsbyHour <- All_Tornadoes %>% 
+  group_by(TornHour = Hour) %>%
+  summarize(totaltornadoes = n())
+```
+
+`Make the labels for the x-axis`
+```{r}
+hourlabs = c("12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM", "6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "12 PM", "1 PM","2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "11 PM")
+
+hourgraph <- ggplot(TornsbyHour, (aes(x = TornHour, y = totaltornadoes))) +
+  #geom_smooth(aes(x = Tornhour, y = totaltornadoes), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_bar(stat = "identity", color = "gray70", fill = "gray70") +
+  scale_x_continuous(expand = c(0, 0), breaks = c(seq(0,23,1)), labels = hourlabs) +
+  scale_y_continuous(limits = c(0, 4000), breaks = c(seq(0,4000,500))) + 
+#  geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  theme_bw() +
+  xlab("Hour") +
+  ylab("Number of Tornadoes\n ")
+
+hourgraph <- hourgraph + theme(axis.title.y = element_text(colour = "black"), axis.text.y = element_text(color = "black"),  axis.text.x = element_text(angle = 45, hjust = 1), axis.text = element_text(size = 12), axis.title=element_text(size=14))
+
+hourgraph
+```
+
+`Make a circular bar graph`
+```{r}
+ggplot(TornsbyHour, (aes(x = TornHour, y = totaltornadoes))) +
+  geom_bar(stat = "identity", fill = "gray70") +
+  scale_x_continuous(breaks = seq(0, 23, 1), labels = hourlabs) +
+  scale_y_continuous(limits = c(0, 4000)) +
+  coord_polar(start = 0) +
+  labs(x = "Hour", y = "Number of Tornadoes") +
+  theme_minimal() 
+```

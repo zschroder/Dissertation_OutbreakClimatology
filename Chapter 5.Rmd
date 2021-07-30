@@ -1,0 +1,359 @@
+---
+title: "Environmental Factors"
+author: "Professor Zoe Schroder"
+date: "7/30/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(sf)
+library(GGally)
+library(USAboundaries)
+library(tmap)
+library(xtable)
+library(lme4)
+library(gridExtra)
+library(corrplot)
+library(sp)
+library(RColorBrewer)
+```
+
+```{r}
+load("BigDays1994_2020.RData")
+```
+
+Projections you may need: 
+```{r}
+merc <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+US_LCC <- "+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m no_defs"
+```
+
+May 20, 2019
+ID: 201905206481
+```{r}
+May20 <- BigDays.sfdfT %>%
+  filter(cDate == "2019-05-20", groupNumber == 6481)
+May20 <- st_convex_hull(May20)
+
+May20centroid <- BigDayCentroids.df %>%
+  filter(cDate == "2019-05-20", groupNumber == 6481)
+
+May20tornadoes <- BigDayTorns1994_2020 %>% 
+  filter(cDate == "2019-05-20", groupNumber == May20centroid$groupNumber)
+
+May20tornadoes <- May20tornadoes %>%
+  mutate(Hour2 = ifelse(Hour <= 6, Hour + 24, Hour))
+```
+
+Plot the CAPE and DLBS for the May 20, 2019 Big Day: 
+
+*First, read in the raster. *
+```{r}
+library(raster)
+ rb <- brick(paste0("E:/Zoe/Projects/Dissertation_OutbreakClimatology/merged_AWIP32.20190520/merged_AWIP32.2019052018")) #<-- this is for varying NARR times
+  CAPE <- raster(rb, layer = 375)
+  HLCY <- raster(rb, layer = 323)
+  CIN <- raster(rb, layer = 376)
+  UGRD500 <- raster(rb, layer = 117) 
+  VGRD500 <- raster(rb, layer = 118) 
+  UGRD850 <- raster(rb, layer = 206) 
+  VGRD850 <- raster(rb, layer = 207)
+  UGRDsfc <- raster(rb, layer = 293) 
+  VGRDsfc <- raster(rb, layer = 294)     
+  DLBS <- sqrt(((UGRD500 - UGRDsfc)**2) + ((VGRD500 - VGRDsfc)**2))
+  SLBS <- sqrt(((UGRD850 - UGRDsfc)**2) + ((VGRD850 - VGRDsfc)**2))
+```
+**Convective Available Potential energy **
+```{r}
+#CAPE = projectRaster(CAPE, crs = "+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+May20 <- st_transform(May20, 
+  crs = "+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+CAPE_May20 <- crop(CAPE, extent(May20))
+CAPE_extent<- mask(CAPE_May20, May20)
+plot(CAPE_extent)
+
+maxCAPE <- which.max(CAPE_extent) #Returns a pixel number
+
+#Test that this max value equals the one in BigDays.sfdfT
+test <- getValues(CAPE_extent) 
+test<-as.matrix(test, ncol=1)
+```
+
+```{r}
+CAPEmaxpos <- xyFromCell(CAPE_extent, maxCAPE)
+
+xy <- data.frame(CAPEmaxpos)
+CAPE_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(CAPE_latlon)
+
+CAPE_latlon <- SpatialPoints(CAPE_latlon)
+proj4string(CAPE_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+counties <- us_counties()
+states <- us_states()
+```
+
+```{r}
+CAPE_fig <- tm_shape(CAPE_extent) +
+  tm_raster(title = "",  n = 6, palette = "Reds") +
+  tm_format(title = expression(paste("Convective Available Potential Energy [J ",kg^-1,"]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.28, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+  #tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May20, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(CAPE_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+CAPE_fig
+```
+
+```{r}
+CIN_May20 <- crop(CIN, extent(May20))
+CIN_extent<- mask(CIN_May20, May20)
+plot(CIN_extent)
+
+minCIN <- which.min(CIN_extent) #Returns a pixel number
+
+#Test that this max value equals the one in BigDays.sfdfT
+test <- getValues(CIN_extent) 
+test<-as.matrix(test, ncol=1)
+```
+
+```{r}
+CINminpos <- xyFromCell(CIN_extent, minCIN)
+
+xy <- data.frame(CINminpos)
+CIN_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(CIN_latlon)
+
+CIN_latlon <- SpatialPoints(CIN_latlon)
+proj4string(CIN_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+CIN_fig <- tm_shape(CIN_extent) +
+  tm_raster(title = "",  n = 6, palette = "Greens") +
+  tm_format(title = expression(paste("Convective Inhibition [J ",kg^-1,"]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.28, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+  #tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May20, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(CIN_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+CIN_fig
+```
+
+**Bulk Shear**
+```{r}
+BS_May20 <- crop(DLBS, extent(May20))
+BS_extent<- mask(BS_May20, May20)
+plot(BS_extent)
+
+maxBS <- which.max(BS_extent)
+```
+
+```{r}
+BSmaxpos <- xyFromCell(BS_extent, maxBS)
+
+xy <- data.frame(BSmaxpos)
+BS_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(BS_latlon)
+
+BS_latlon <- SpatialPoints(BS_latlon)
+proj4string(BS_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+mypalette <- brewer.pal(name = "Purples", n =6)
+mypalette <- mypalette[3:6]
+DLBS_fig <- tm_shape(BS_extent) +
+  tm_raster(title = "", n = 5, palette = mypalette) +
+  tm_format(title = expression(paste("Deep-Layer Bulk Shear [m ",s^-1,"]")), "World", legend.position = c("right", "bottom"),
+  #tm_format(title = expression(paste("Deep-Layer Bulk Shear [m ", s^-1, "]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.2, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+#  tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May20, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(BS_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+DLBS_fig
+```
+
+
+**Bulk Shear**
+```{r}
+SBS_May20 <- crop(SLBS, extent(May20))
+SBS_extent<- mask(SBS_May20, May20)
+plot(SBS_extent)
+
+maxSBS <- which.max(SBS_extent)
+```
+
+```{r}
+SBSmaxpos <- xyFromCell(SBS_extent, maxSBS)
+
+xy <- data.frame(SBSmaxpos)
+SBS_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(SBS_latlon)
+
+SBS_latlon <- SpatialPoints(SBS_latlon)
+proj4string(SBS_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+SLBS_fig <- tm_shape(SBS_extent) +
+  tm_raster(title = "", n = 5, palette = "Blues") +
+  tm_format(title = expression(paste("Shallow-Layer Bulk Shear [m ",s^-1,"]")), "World", legend.position = c("right", "bottom"),
+  #tm_format(title = expression(paste("Deep-Layer Bulk Shear [m ", s^-1, "]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.2, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+#  tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May20, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(SBS_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+SLBS_fig
+```
+**Combine into one figure: **
+```{r}
+tmap_arrange(CAPE_fig, CIN_fig, DLBS_fig, SLBS_fig, ncol = 2, nrow = 2)
+```
+
+Look at the distribution of CAPE, CIN, DLBS, SLBS, SRH
+```{r}
+( A <- ggplot(BigDays.sfdfT, (aes(maxCAPE))) +
+  #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_freqpoly((aes(maxCAPE, color = "Maximum CAPE")), lwd = 1, show.legend = TRUE) +
+  geom_freqpoly((aes(avgCAPE, color = "Average CAPE")), lwd = 1, show.legend = TRUE) +
+xlab(expression(paste("Convective Available Potential Energy [J ", kg^-1, "]"))) +
+  ylab("Number of Clusters") +
+  scale_x_continuous(expand = c(0, 0), limits = c(-500, 7000),breaks = c(-500, 0, 1000, 2000, 3000, 4000, 5000, 6000, 7000),labels = c("","0", "1000", "2000", "3000", "4000", "5000", "6000", "7000")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 125), breaks = c(0, 25, 50, 75, 100, 125),labels = c("0", "25", "50", "75", "100", "125")) +
+  theme_bw() )
+
+A <- update_labels(A, list(colour=""))
+
+A <- A + theme(legend.position = c(0.7, 0.8),
+          legend.box = "vertical")
+```
+
+```{r}
+( B <- ggplot(BigDays.sfdfT, (aes(minCIN))) +
+  #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_freqpoly((aes(minCIN, color = "Minimum CIN")), lwd = 1, show.legend = TRUE) +
+  geom_freqpoly((aes(avgCIN, color = "Average CIN")), lwd = 1, show.legend = TRUE) +
+  xlab(expression(paste("Convective Inhibition[J ", kg^-1, "]"))) +
+  ylab("Number of Clusters") +
+  scale_x_continuous(expand = c(0, 0), limits = c(-700,50), breaks = c(-700, -600, -500, -400, -300, -200, -100, 0), labels = c("-700", "-600", "-500", "-400", "-300", "-200", "-100", "0")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 350), breaks = c(0, 50, 100, 150, 200, 250, 300, 350), labels = c("0", "50", "100", "150", "200", "250", "300", "350")) +
+  theme_bw() )
+
+B <- update_labels(B, list(colour=""))
+
+B <- B + theme(legend.position = c(0.2, 0.8),
+          legend.box = "vertical")
+```
+
+```{r}
+( C <- ggplot(BigDays.sfdfT, (aes(maxBS_shallow))) +
+  #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_freqpoly((aes(maxBS_shallow, color = "Maximum SLBS")), lwd = 1, show.legend = TRUE) +
+  geom_freqpoly((aes(avgBS_shallow, color = "Average SLBS")), lwd = 1, show.legend = TRUE) +
+xlab(expression(paste("Shallow-Layer Bulk Shear [m ", s^-1, "]"))) +
+  ylab("Number of Clusters") +
+  scale_x_continuous(expand = c(0, 0), breaks = c(0, 5, 10, 15, 20, 25, 30, 35),labels = c("0", "5", "10", "15", "20", "25", "30", "35")) +
+  scale_y_continuous(expand = c(0, 0),  limits = c(0, 100), breaks = c(0, 25, 50, 75, 100),labels = c("0", "25", "50", "75", "100")) +
+  theme_bw() )
+
+C <- update_labels(C, list(colour=""))
+
+C <- C + theme(legend.position = c(0.8, 0.8),
+          legend.box = "vertical")
+```
+
+```{r}
+( D <- ggplot(BigDays.sfdfT, (aes(maxBS_deep))) +
+  #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_freqpoly((aes(maxBS_deep, color = "Maximum DLBS")), lwd = 1, show.legend = TRUE) +
+  geom_freqpoly((aes(avgBS_deep, color = "Average DLBS")), lwd = 1, show.legend = TRUE) +
+  xlab(expression(paste("Deep_Layer Bulk Shear [m ", s^-1, "]"))) +
+  ylab("Number of Clusters") + +
+  scale_x_continuous(expand = c(0, 0), breaks = c(0, 10, 20, 30, 40, 50),labels = c("0", "10", "20", "30", "40", "50")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 100), breaks = c(0, 25, 50, 75, 100),labels = c("0", "25", "50", "75", "100")) +
+  theme_bw() )
+
+D <- update_labels(D, list(colour=""))
+
+D <- D + theme(legend.position = c(0.8, 0.8),
+          legend.box = "vertical")
+```
+
+```{r}
+( E <- ggplot(BigDays.sfdfT, (aes(maxHLCY))) +
+  #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_freqpoly((aes(maxHLCY, color = "Maximum HLCY")), lwd = 1, show.legend = TRUE) +
+  geom_freqpoly((aes(avgBS_deep, color = "Average HLCY")), lwd = 1, show.legend = TRUE) +
+xlab(expression(paste("Storm-Relative Helicity [", m^2, s^-2, "]"))) +
+  ylab("Number of Clusters") +
+  scale_x_continuous(expand = c(0, 0), limits = c(-100,900), breaks = c(0, 100, 200, 300, 400, 500, 600, 700, 800, 900),labels = c("0", "100", "200", "300", "400", "500", "600", "700", "800", "900")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 700), breaks = c(0, 100, 200, 300, 400, 500, 600, 700),labels = c("0", "100", "200", "300", "400", "500", "600", "700")) +
+  theme_bw() )
+
+E <- update_labels(E, list(colour=""))
+
+E <- E + theme(legend.position = c(0.7, 0.8),
+          legend.box = "vertical")
+```
+
+```{r}
+ggarrange(A, B, C, D, E, ncol = 2, nrow = 3)
+#ggarrange(A, B, C, ncol = 1)
+```
