@@ -366,7 +366,7 @@ BigDays1994_2020$HullArea <- st_area(BigDays1994_2020)
 ```
 
 ```{r}
-#save("All_Tornadoes", "BigDaysLargeGroups1994_2020", "BigDayLargeGroupTorns1994_2020", "LargeGroups1994_2020", "LargeGroupTorns1994_2020", "BigDays1994_2020", "BigDayTorns1994_2020", file = "BigDays1994_2020.RData" )
+#save("All_Tornadoes", "BigDayCentroids.df", "BigDaysLargeGroups1994_2020", "BigDayLargeGroupTorns1994_2020", "LargeGroups1994_2020", "LargeGroupTorns1994_2020", "BigDays1994_2020", "BigDayTorns1994_2020", file = "BigDays1994_2020.RData" )
 
 load("BigDays1994_2020.RData")
 ```

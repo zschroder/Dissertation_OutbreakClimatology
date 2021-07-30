@@ -27,6 +27,32 @@ library(RColorBrewer)
 load("BigDays1994_2020.RData")
 ```
 
+
+```{r}
+max(BigDays1994_2020$minCIN)
+min(BigDays1994_2020$minCIN)
+mean(BigDays1994_2020$minCIN)
+
+test <- BigDays1994_2020 %>% 
+  filter(maxHLCY <= 2000)
+
+max(test$maxHLCY)
+min(test$maxHLCY)
+mean(test$maxHLCY)
+```
+
+
+```{r}
+Top3 <- BigDays1994_2020 %>%
+  arrange(desc(nT)) %>%
+  head(3)
+
+Bot3 <- BigDays1994_2020 %>%
+  arrange(desc(nT)) %>%
+  tail(3)
+```
+
+
 Projections you may need: 
 ```{r}
 merc <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
@@ -36,7 +62,7 @@ US_LCC <- "+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96 +x_0=0 +y_0=0 +ell
 May 20, 2019
 ID: 201905206481
 ```{r}
-May20 <- BigDays.sfdfT %>%
+May20 <- BigDays1994_2020 %>%
   filter(cDate == "2019-05-20", groupNumber == 6481)
 May20 <- st_convex_hull(May20)
 
@@ -221,26 +247,26 @@ DLBS_fig
 
 **Bulk Shear**
 ```{r}
-SBS_May20 <- crop(SLBS, extent(May20))
-SBS_extent<- mask(SBS_May20, May20)
-plot(SBS_extent)
+SLBS_May20 <- crop(SLBS, extent(May20))
+SLBS_extent<- mask(SLBS_May20, May20)
+plot(SLBS_extent)
 
-maxSBS <- which.max(SBS_extent)
+maxSLBS <- which.max(SLBS_extent)
 ```
 
 ```{r}
-SBSmaxpos <- xyFromCell(SBS_extent, maxSBS)
+SLBSmaxpos <- xyFromCell(SLBS_extent, maxSLBS)
 
-xy <- data.frame(SBSmaxpos)
-SBS_latlon <- data.frame(lon=xy$x, lat=xy$y)
-print(SBS_latlon)
+xy <- data.frame(SLBSmaxpos)
+SLBS_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(SLBS_latlon)
 
-SBS_latlon <- SpatialPoints(SBS_latlon)
-proj4string(SBS_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+SLBS_latlon <- SpatialPoints(SLBS_latlon)
+proj4string(SLBS_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
 ```
 
 ```{r}
-SLBS_fig <- tm_shape(SBS_extent) +
+SLBS_fig <- tm_shape(SLBS_extent) +
   tm_raster(title = "", n = 5, palette = "Blues") +
   tm_format(title = expression(paste("Shallow-Layer Bulk Shear [m ",s^-1,"]")), "World", legend.position = c("right", "bottom"),
   #tm_format(title = expression(paste("Deep-Layer Bulk Shear [m ", s^-1, "]")), "World", legend.position = c("right", "bottom"),
@@ -258,7 +284,7 @@ tm_shape(May20, is.master = TRUE, projection = merc) +
   tm_borders(col = "black", lwd = 3)  +
 #tm_shape(May6centroid) +
 #  tm_symbols(size = 1.25, col = "black", shape = 24) +
-tm_shape(SBS_latlon) + 
+tm_shape(SLBS_latlon) + 
   tm_symbols(size = 1.4, col = "black", shape = 22)
 SLBS_fig
 ```
@@ -269,7 +295,7 @@ tmap_arrange(CAPE_fig, CIN_fig, DLBS_fig, SLBS_fig, ncol = 2, nrow = 2)
 
 Look at the distribution of CAPE, CIN, DLBS, SLBS, SRH
 ```{r}
-( A <- ggplot(BigDays.sfdfT, (aes(maxCAPE))) +
+( A <- ggplot(BigDays1994_2020, (aes(maxCAPE))) +
   #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
   geom_freqpoly((aes(maxCAPE, color = "Maximum CAPE")), lwd = 1, show.legend = TRUE) +
   geom_freqpoly((aes(avgCAPE, color = "Average CAPE")), lwd = 1, show.legend = TRUE) +
@@ -286,7 +312,7 @@ A <- A + theme(legend.position = c(0.7, 0.8),
 ```
 
 ```{r}
-( B <- ggplot(BigDays.sfdfT, (aes(minCIN))) +
+( B <- ggplot(BigDays1994_2020, (aes(minCIN))) +
   #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
   geom_freqpoly((aes(minCIN, color = "Minimum CIN")), lwd = 1, show.legend = TRUE) +
   geom_freqpoly((aes(avgCIN, color = "Average CIN")), lwd = 1, show.legend = TRUE) +
@@ -303,7 +329,7 @@ B <- B + theme(legend.position = c(0.2, 0.8),
 ```
 
 ```{r}
-( C <- ggplot(BigDays.sfdfT, (aes(maxBS_shallow))) +
+( C <- ggplot(BigDays1994_2020, (aes(maxBS_shallow))) +
   #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
   geom_freqpoly((aes(maxBS_shallow, color = "Maximum SLBS")), lwd = 1, show.legend = TRUE) +
   geom_freqpoly((aes(avgBS_shallow, color = "Average SLBS")), lwd = 1, show.legend = TRUE) +
@@ -320,12 +346,12 @@ C <- C + theme(legend.position = c(0.8, 0.8),
 ```
 
 ```{r}
-( D <- ggplot(BigDays.sfdfT, (aes(maxBS_deep))) +
+( D <- ggplot(BigDays1994_2020, (aes(maxBS_deep))) +
   #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
   geom_freqpoly((aes(maxBS_deep, color = "Maximum DLBS")), lwd = 1, show.legend = TRUE) +
   geom_freqpoly((aes(avgBS_deep, color = "Average DLBS")), lwd = 1, show.legend = TRUE) +
   xlab(expression(paste("Deep_Layer Bulk Shear [m ", s^-1, "]"))) +
-  ylab("Number of Clusters") + +
+  ylab("Number of Clusters") +
   scale_x_continuous(expand = c(0, 0), breaks = c(0, 10, 20, 30, 40, 50),labels = c("0", "10", "20", "30", "40", "50")) +
   scale_y_continuous(expand = c(0, 0), limits = c(0, 100), breaks = c(0, 25, 50, 75, 100),labels = c("0", "25", "50", "75", "100")) +
   theme_bw() )
@@ -337,7 +363,7 @@ D <- D + theme(legend.position = c(0.8, 0.8),
 ```
 
 ```{r}
-( E <- ggplot(BigDays.sfdfT, (aes(maxHLCY))) +
+( E <- ggplot(BigDays1994_2020, (aes(maxHLCY))) +
   #geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
   geom_freqpoly((aes(maxHLCY, color = "Maximum HLCY")), lwd = 1, show.legend = TRUE) +
   geom_freqpoly((aes(avgBS_deep, color = "Average HLCY")), lwd = 1, show.legend = TRUE) +
@@ -356,4 +382,232 @@ E <- E + theme(legend.position = c(0.7, 0.8),
 ```{r}
 ggarrange(A, B, C, D, E, ncol = 2, nrow = 3)
 #ggarrange(A, B, C, ncol = 1)
+```
+
+
+
+
+
+
+
+
+
+
+#####################################################
+Sensitivity to cluster analysis
+
+```{r}
+June6 <- BigDays.sfdfT %>%
+  filter(ID == "199906061645")
+June6 <- st_convex_hull(June6)
+June6centroid <- groupDayCentroids.sfdfT %>%
+  filter(ID == "199906061645")
+
+All_Tornadoes <- All_Tornadoes %>%
+   mutate(ID = paste0(gsub("-", "", cDate), groupNumber))
+June6tornadoes <- All_Tornadoes %>% 
+  filter(ID == "199906061645")
+```
+*Plot the CAPE, HLCY, and CIN for the June 6, 2003 Big Day. First, read in the raster. *
+```{r}
+i=1
+library(raster)
+   #rb <- brick(paste0("/Users/zoeschroder/Desktop/Projects/Torn_Freq/", June6$slug2[i], "/", June6$slug[i])) 
+  rb <- brick(paste0("E:/Zoe/Projects/Torn_Freq/merged_AWIP32.19990606/merged_AWIP32.1999060615"))
+  CAPE <- raster(rb, layer = 375)
+  HLCY <- raster(rb, layer = 323)
+  CIN <- raster(rb, layer = 376)
+  UGRD500 <- raster(rb, layer = 117) 
+  VGRD500 <- raster(rb, layer = 118) 
+  UGRDsfc <- raster(rb, layer = 293) 
+  VGRDsfc <- raster(rb, layer = 294)     
+  BS <- sqrt(((UGRD500 - UGRDsfc)**2) + ((VGRD500 - VGRDsfc)**2))
+```
+**Convective Available Potential energy **
+```{r}
+CAPE_June6 <- crop(CAPE, extent(June6))
+CAPE_extent<- mask(CAPE_June6, June6)
+plot(CAPE_extent)
+maxCAPE <- which.max(CAPE_extent) #Returns a pixel number
+#Test that this max value equals the one in BigDays.sfdfT
+test <- getValues(CAPE_extent) 
+test<-as.matrix(test, ncol=1)
+```
+
+```{r}
+CAPEmaxpos <- xyFromCell(CAPE_extent, maxCAPE)
+xy <- data.frame(CAPEmaxpos)
+CAPE_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(CAPE_latlon)
+CAPE_latlon <- SpatialPoints(CAPE_latlon)
+proj4string(CAPE_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+#install.packages("USAboundariesData")
+counties <- us_counties()
+states <- us_states()
+```
+
+```{r}
+Group23_torns <- All_Tornadoes %>%
+  filter(ID == 199906061645, elat >= 46) 
+
+Group23_torns$mag <- as.numeric(Group23_torns$mag)
+Group23_torns$mag2 <- cut(Group23_torns$mag, breaks=c(-1, 0, 1, 2, 3, 4, 5))
+suppressMessages(library(lubridate))
+
+Group_23 <- All_Tornadoes %>%
+  filter(ID == 199906061645, elat >= 46) %>%
+  group_by(groupNumber, cDate) %>%
+  summarize(nT = n(),
+            n0 = sum(mag == 0),
+            n1 = sum(mag == 1),
+            n2 = sum(mag == 2),
+            n3 = sum(mag == 3),
+            n4 = sum(mag == 4),
+            n5 = sum(mag == 5),
+            ATP = sum(ED),
+            maxATP = max(ED),
+            avgATP = mean(ED),
+            GroupDayCas = sum(cas),
+            GroupDayFat = sum(fat),
+            StartTime_CST = first(DateTime),
+            EndTime_CST= last(DateTime),
+            StartTime_UTC = StartTime_CST + 21600,
+            EndTime_UTC = EndTime_CST + 21600,
+            Duration = difftime(EndTime_CST, StartTime_CST, units = "secs"))%>%
+  filter(nT >= 10) %>%
+  mutate(Year = year(cDate),
+         Mo = month(cDate),
+         Month = format(cDate, "%m"), # this is needed to preserve the leading zeros
+         Day = format(cDate, "%d"), 
+         ATP_TW = ATP/10^12) 
+
+Group_23 <- st_convex_hull(Group_23)
+```
+
+Get the centroid (central point of the tornado activity) for each big day. 
+```{r, eval = FALSE}
+Group_23Centroids.df <- st_centroid(Group_23)
+Group_23Centroids.df$groupArea <- st_area(st_convex_hull(Group_23))
+Group_23Centroids.df$groupDensity <- Group_23Centroids.df$nT/Group_23Centroids.df$groupArea
+```
+
+Separate June 6, 1999 into multiple clusters. 
+
+```{r}
+Group13_torns <- All_Tornadoes %>%
+  filter(ID == 199906061645, elat < 46) 
+
+Group13_torns$mag <- as.numeric(Group13_torns$mag)
+Group13_torns$mag2 <- cut(Group13_torns$mag, breaks=c(-1, 0, 1, 2, 3, 4, 5))
+
+
+Group_13 <- All_Tornadoes %>%
+  filter(ID == 199906061645, elat < 46) %>%
+  group_by(groupNumber, cDate) %>%
+  summarize(nT = n(),
+            n0 = sum(mag == 0),
+            n1 = sum(mag == 1),
+            n2 = sum(mag == 2),
+            n3 = sum(mag == 3),
+            n4 = sum(mag == 4),
+            n5 = sum(mag == 5),
+            ATP = sum(ED),
+            maxATP = max(ED),
+            avgATP = mean(ED),
+            GroupDayCas = sum(cas),
+            GroupDayFat = sum(fat),
+            StartTime_CST = first(DateTime),
+            EndTime_CST= last(DateTime),
+            StartTime_UTC = StartTime_CST + 21600,
+            EndTime_UTC = EndTime_CST + 21600,
+            Duration = difftime(EndTime_CST, StartTime_CST, units = "secs"))%>%
+  filter(nT >= 10) %>%
+  mutate(Year = year(cDate),
+         Mo = month(cDate),
+         Month = format(cDate, "%m"), # this is needed to preserve the leading zeros
+         Day = format(cDate, "%d"), 
+         ATP_TW = ATP/10^12) 
+```
+
+```{r}
+Group_13 <- st_convex_hull(Group_13)
+
+```
+Get the centroid (central point of the tornado activity) for each big day. 
+```{r, eval = FALSE}
+Group_13Centroids.df <- st_centroid(Group_13)
+Group_13Centroids.df$groupArea <- st_area(st_convex_hull(Group_13))
+Group_13Centroids.df$groupDensity <- Group_13Centroids.df$nT/Group_13Centroids.df$groupArea
+```
+
+```{r, eval = FALSE}
+J6_All <- tm_shape(CAPE_extent, is.master = TRUE, projection = merc) +
+  tm_raster(title = "",  n = 6, palette = "Greys") +
+  tm_format(title = expression(paste("CAPE [J ", kg^-1, "]")), "World", legend.position = c("left", "bottom"),
+                   attr.position = c("left", "bottom"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.05, 0.1, .075, .1), #bottom, left, top
+                    legend.text.size = 5, legend.width = -0.28, legend.title.size=3, legend.bg.color = "white", title.size = 2) +
+#tm_shape(counties) +
+  #tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 1, position = c("left", "bottom"), color.dark = "gray70") +
+tm_shape(states) +
+  tm_borders() +
+#tm_shape(June6, is.master = TRUE, projection = merc) +
+ # tm_borders(col = "black", lwd = 3)  +
+#tm_shape(June6tornadoes) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+#tm_shape(CAPE_latlon) + 
+#  tm_symbols(size = 1.4, col = "black", shape = 22) + 
+#tm_shape(June6tornadoes, 
+#         projection = "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs", 
+#         is.master = TRUE) +
+ #   tm_symbols(col = "darkblue", size = 2) +
+tm_shape(Group_23) + 
+  tm_borders(col = "gray15", 
+             alpha = 1, 
+             lwd = 3)  +
+    tm_compass(color.dark = "gray70", 
+             size = 5, 
+             lwd = 2, 
+             position = c("left","top"))  + 
+tm_shape(Group23_torns) +
+    tm_symbols(size = 2, 
+               col = "red", 
+               #n = 6, 
+               #palette = "Reds", 
+               alpha = 0.8, 
+               border.alpha = 0, 
+               labels = c("0", "1", "2", "3", "4", "5"), 
+               title.col = "EF Rating") +
+    tm_layout(title = "June 6, 1999", 
+              title.position = c("center", "top"), 
+              legend.title.size = 1.4,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1.2, 
+              legend.width = -0.15, 
+              title.size = 3) +
+  tm_shape(Group_13) + 
+  tm_borders(col = "gray15", 
+             alpha = 1, 
+             lwd = 3) +
+    tm_compass(color.dark = "gray70", 
+             size = 5, 
+             lwd = 2, 
+             position = c("left","top")) + 
+    tm_layout(legend.bg.color = "white", 
+            legend.text.size = 1.5) + 
+  tm_shape(Group13_torns) +
+    tm_symbols(size = 2, 
+               col = "blue", 
+               #n = 6, 
+               #palette = cr, 
+               alpha = 0.8, 
+               border.alpha = 0) 
+J6_All
 ```
