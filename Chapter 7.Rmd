@@ -1,0 +1,374 @@
+---
+title: "Chapter 7"
+author: "Professor Zoe Schroder"
+date: "8/2/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(sf)
+library(GGally)
+library(USAboundaries)
+library(tmap)
+library(xtable)
+library(lme4)
+library(gridExtra)
+library(corrplot)
+library(sp)
+library(RColorBrewer)
+```
+
+```{r}
+load("BigDays1994_2020.RData")
+```
+
+Projections you may need: 
+```{r}
+merc <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+US_LCC <- "+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m no_defs"
+```
+
+# Make a color ramp for Intensity
+
+```{r}
+YtoR <- RColorBrewer::brewer.pal(9, "YlOrRd")
+YtoR <- YtoR[-c(1:2,9)]
+```
+
+```{r}
+cluster2 <- BigDays1994_2020 %>%
+  filter(ID == 201504245493)
+
+cluster2 <- st_convex_hull(cluster2)
+
+cluster2torns <- BigDayTorns1994_2020 %>%
+  filter(ID == 201504245493) 
+
+cluster2 %>%
+  summarize(Area = HullArea/(10**6),
+            Duration = Duration/3600)
+
+cluster2torns$mag <- as.numeric(cluster2torns$mag)
+cluster2torns$mag2 <- cut(cluster2torns$mag, breaks=c(-1, 0, 1, 2, 3, 4, 5))
+```
+
+```{r}
+B <- tm_shape(stateBorders) + 
+  tm_borders(col = "gray70") +
+tm_shape(cluster2) + 
+  tm_borders(col = "gray15", 
+             alpha = 1, 
+             lwd = 2) +
+  tm_scale_bar(color.dark = "gray70", 
+               width = .2, 
+               size = 1, 
+               lwd = 2, 
+               position = c("left","bottom")) +
+    tm_compass(color.dark = "gray70", 
+             size = 5, 
+             lwd = 2, 
+             position = c("left","top")) + 
+    tm_format("World", 
+              attr.position = c("left", "top"),
+              legend.frame = FALSE,
+              inner.margins = c(.15, .15, .15, .25)) +
+    tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75) + 
+  tm_shape(cluster2torns, 
+         projection = merc, 
+         is.master = TRUE) +
+    tm_symbols(size = 3, 
+               col = "mag2", 
+               n = 6, 
+               palette = YtoR, 
+               alpha = 0.7, 
+               border.alpha = 0, 
+               labels = c("0", "1", "2", "3", "4", "5"), 
+               title.col = "EF Rating") +
+    tm_layout(title = "June 6, 1999 \n 36 tornadoes", 
+              title.position = c("center", "top"), 
+              legend.title.size = 1.4,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1.2, 
+              legend.width = -0.15, 
+              title.size = 1.5)
+  B
+```
+
+
+```{r}
+tmap_arrange(A, B, ncol = 2, nrow = 2)
+```
+
+
+
+
+
+##SPC Day 2 Convective Outlook
+
+```{r}
+library(sf)
+Day1_outlook <- st_read(
+  "E:/Zoe/Projects/Model Application/SPCout/day1otlk_cat.shp")
+```
+
+```{r}
+library(tmap)
+tm_shape(Day1_outlook) + 
+  tm_borders()
+```
+
+```{r}
+library(USAboundaries)
+sts <- state.name[!state.name %in% c("Alaska", "Hawaii")]
+stateBorders <- us_states(states = sts)
+```
+
+```{r}
+merc <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+```
+
+
+```{r}
+cr <- RColorBrewer::brewer.pal(9, "Greys")
+cr <- cr[-c(1:3)]
+```
+
+*Extract just the moderate risk*
+```{r}
+Day1out <- Day1_outlook[5:6,]
+
+cities <- us_cities()
+counties.sf <- us_counties()
+popinhull <- cities[Day1out,]
+```
+
+```{r}
+citiesatrisk <- c("Memphis", "Birmingham", "Montgomery", "Little Rock", "Jackson", "Monroe", "Starkville", "Oxford", "Greenville", "Brookhaven")
+library(dplyr)
+citiesatrisk2 <- popinhull %>%
+  filter(city %in% citiesatrisk)  %>%
+  filter(!county %in% c("Clarke", "EAST FELICIANA", "Calhoun", "BUTLER")) 
+citiesatrisk2 <- st_as_sf(as.data.frame(citiesatrisk2))
+```
+
+```{r}
+mycols <- colors()[c(451, 555)]
+
+tm_shape(counties.sf) + 
+  tm_borders(col = "gray70", alpha = 1) +  
+  tm_layout(title = "March 17, 2021 \n Day 1 Outlook", 
+              title.position = c("center", "top"), 
+              title.bg.color = "white",
+            legend.show = TRUE,  
+            legend.title.size = 1.1,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1, 
+              legend.width = -0.12, 
+              title.size = 1.55) +
+tm_shape(stateBorders) + 
+  tm_borders(col = "black", alpha = 1) +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+  tm_scale_bar(width = .3, size = 0.8, lwd = 1.75, color.dark = "gray70", bg.color = "white") +
+  tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75, 
+            attr.position = c("left", "bottom"), 
+            inner.margins = c(.15, .15, .15, .15)) +
+  tm_shape(Day1out, is.master = TRUE, projection = merc) +
+  tm_fill("LABEL",
+            title = "Probability",
+            palette = mycols, alpha = .6) +
+tm_shape(citiesatrisk2) +
+ tm_bubbles(size = 0.15, col = "black", border.lwd = 0, alpha = 0.6 ) +
+  tm_text("city", size = 1.2, just = "top")
+
+```
+
+```{r}
+#Get the area of the moderate risk
+outlookarea = st_area(Day1out)
+
+#Get the latitude and longitude
+coords = st_centroid(Day1out)
+long = -88.7
+lat = 33.9
+
+#Total Population: 
+#devtools::install_github("ropensci/USAboundariesData")
+library(USAboundariesData)
+cities <- us_cities()
+popinhull <- cities[Day1out,]
+dayPOP <- sum(popinhull$population)
+```
+
+##Tornado Model
+
+```{r}
+library(lme4)
+library(MASS)
+modelFinalT <- glm.nb(nT ~ HullArea + maxCAPE + maxBS_deep + maxBS_shallow, data = BigDays1994_2020)
+summary(modelFinalT)
+```
+
+```{r}
+#Without predict.lm
+predsnT <- predict(modelFinalT, data.frame(HullArea = outlookarea, maxCAPE = 2000, maxBS_deep = 50, maxBS_shallow = 30), type = "response", interval = "prediction", level = 0.9)
+
+predsnT
+
+#devtools::install_github("paul-buerkner/brms")
+#library(brms)
+```
+
+```{r}
+theta <- modelFinalT$theta
+nCthresh <- 50
+
+predictions <- predict.glm(modelFinalT, data.frame(HullArea = outlookarea, maxCAPE = 2000, maxBS_deep = 50, maxBS_shallow = 30), type = "response")
+probs1 <- 1 - pnbinom(nCthresh, size = theta, mu = predictions)
+
+#There is a 
+probs1*100
+#% chance of more than 50 tornadoes on March 17, 2021
+```
+
+```{r}
+theta <- modelFinalT$theta
+nCthresh <- 100
+
+predictions <- predict.glm(modelFinalT, data.frame(HullArea = outlookarea, maxCAPE = 2000, maxBS_deep = 50, maxBS_shallow = 30), type = "response")
+probs1 <- 1 - pnbinom(nCthresh, size = theta, mu = predictions)
+
+#There is a 
+probs1*100
+#% chance of more than 100 tornadoes on March 17, 2021
+```
+
+##Casualty Model
+```{r}
+modelFinalC <- glm.nb(GroupDayCas ~ totalPOP + maxCAPE + maxBS_deep + maxBS_shallow + Lat + Lon + Year, data = BigDays1994_2020)
+summary(modelFinalC)
+```
+
+```{r}
+predscas <- predict(modelFinalC, data.frame(totalPOP = dayPOP, maxCAPE = 2000, maxBS_deep = 50, maxBS_shallow = 30, Lat = lat, Lon = long, Year = 2021), type = "response", interval = "prediction", level = 0.9)
+
+predscas
+```
+
+```{r}
+theta <- modelFinalC$theta
+nCthresh <- 50
+
+predictions <- predict.glm(modelFinalC, newdata = data.frame(totalPOP = dayPOP, maxCAPE = 2000, maxBS_deep = 50, maxBS_shallow = 30, Lat = lat, Lon = long, Year = 2021), type = "response")
+probs1 <- 1 - pnbinom(nCthresh, size = theta, mu = predictions)
+
+#There is a 
+probs1*100
+#% chance of more than 50 casualties on March 17, 2021
+```
+
+```{r}
+theta <- modelFinalC$theta
+nCthresh <- 100
+
+predictions <- predict.glm(modelFinalC, newdata = data.frame(totalPOP = dayPOP, maxCAPE = 2000, maxBS_deep = 50, maxBS_shallow = 30, Lat = lat, Lon = long, Year = 2021), type = "response")
+probs1 <- 1 - pnbinom(nCthresh, size = theta, mu = predictions)
+
+#There is a 
+probs1*100
+#% chance of more than 100 casualties on March 17, 2021
+```
+
+
+Read in the raw data from March 17, 2021 big day: 
+```{r}
+dat <- read.csv("210317_rpts_raw_torn.csv", header = TRUE)
+```
+
+```{r}
+dat.SP <- st_as_sf(dat, coords = c("LON", "LAT"), crs = 4326)
+```
+
+
+```{r}
+Mar17_AllTorns <- tm_shape(counties.sf) + 
+  tm_borders(col = "gray70", alpha = 1) +  
+  tm_layout(title = "Tornado Reports", 
+              title.position = c("center", "top"), 
+              title.bg.color = "white",
+            legend.show = TRUE,  
+            legend.title.size = 1.1,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1, 
+              legend.width = -0.7, 
+              title.size = 1.55) +
+tm_shape(stateBorders) + 
+  tm_borders(col = "black", alpha = 1) +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+  tm_scale_bar(width = .3, size = 0.8, lwd = 1.75, color.dark = "gray70", bg.color = "white") +
+  tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75, 
+            attr.position = c("left", "bottom"), 
+            inner.margins = c(.15, .15, .15, .15)) +
+tm_shape(dat.SP, is.master = TRUE) +
+  tm_bubbles(size = 0.4, col = "black", border.lwd = 0, alpha = 0.6 )
+```
+
+
+
+
+```{r}
+TorninHull <- dat.SP %>%
+filter(County %in% popinhull$county) %>%
+  filter(State %in% popinhull$state_abbr)
+```
+
+```{r}
+Mar17_TorninRisk <- tm_shape(counties.sf) + 
+  tm_borders(col = "gray70", alpha = 1) +  
+  tm_layout(title = "Tornadoes in Risk Area", 
+              title.position = c("center", "top"), 
+              title.bg.color = "white",
+            legend.show = TRUE,  
+            legend.title.size = 1.1,
+              legend.position = c("right", "bottom"), 
+              legend.stack = "horizontal",
+              legend.frame = FALSE, 
+              legend.text.size = 1, 
+              legend.width = -0.2, 
+              title.size = 1.55) +
+tm_shape(stateBorders) + 
+  tm_borders(col = "black", alpha = 1) +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+  tm_scale_bar(width = .3, size = 0.8, lwd = 1.75, color.dark = "gray70", bg.color = "white") +
+  tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75, 
+            attr.position = c("left", "bottom"), 
+            inner.margins = c(.15, .15, .15, .15)) +
+  tm_shape(Day1out, is.master = TRUE, projection = merc) +
+  tm_fill("LABEL",
+            title = "Probability",
+            palette = mycols, alpha = .6) +
+#tm_shape(citiesatrisk2) +
+# tm_bubbles(size = 0.15, col = "black", border.lwd = 0, alpha = 0.6 ) +
+#  tm_text("city", size = 1.2, just = "top") +
+tm_shape(TorninHull) +
+  tm_bubbles(size = 0.3, col = "black", border.lwd = 0, alpha = 0.6 )
+```
+
+```{r}
+tmap_arrange(Mar17_AllTorns, Mar17_TorninRisk, ncol = 2, nrow = 1)
+```
+

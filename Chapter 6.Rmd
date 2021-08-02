@@ -1,0 +1,340 @@
+---
+title: "Chapter 6"
+author: "Professor Zoe Schroder"
+date: "8/2/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+load("BigDays1994_2020.RData")
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(sf)
+library(GGally)
+library(USAboundaries)
+library(tmap)
+library(xtable)
+library(lme4)
+library(gridExtra)
+library(corrplot)
+library(sp)
+library(RColorBrewer)
+```
+
+
+
+*Extract the Hull, centroids, and tornadoes for the May 30, 2004 big day. *
+
+```{r, eval = FALSE}
+May30 <- BigDaysLargeGroups1994_2020 %>%
+  filter(cDate == "2004-05-30")
+May30 <- st_convex_hull(May30)
+
+May30centroid <- BigDayCentroids.df %>%
+  filter(cDate == "2004-05-30")
+
+May30tornadoes <- BigDayLargeGroupTorns1994_2020 %>% 
+  filter(groupNumber == May30centroid$groupNumber)
+
+May30tornadoes <- May30tornadoes %>%
+  mutate(Hour2 = ifelse(Hour <= 6, Hour + 24, Hour))
+```
+.
+```{r}
+sts <- state.name[!state.name %in% c("Alaska", "Hawaii")]
+stateBorders <- us_states(states = sts)
+```
+
+
+Projections you may need: 
+```{r}
+merc <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+US_LCC <- "+proj=lcc +lat_1=33 +lat_2=45 +lat_0=39 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m no_defs"
+```
+
+```{r}
+library(RColorBrewer)
+mypalette <- brewer.pal(name = "Greys", n =9)
+mypalette <- rev(mypalette[3:8])
+```
+
+**Make a map of the May 30 tornado day. Obtain the state and county boundaries from the `USAboundaries` package. **
+```{r}
+mypalette2 <- rev(mypalette[2:5])
+
+May30tornadoes$Hour2 <- cut(May30tornadoes$Hour2, breaks=c(6,12,18,24,30))
+
+tm_shape(stateBorders) + 
+  tm_borders(col = "gray70", alpha = 1) +
+  tm_scale_bar(width = .3, size = 0.8, lwd = 1.75, color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+  tm_layout(legend.bg.color = "white", 
+            legend.text.size = .75, 
+            attr.position = c("right", "top"), 
+            inner.margins = c(.15, .15, .1, .2)) +
+#tm_shape(counties.sf) +
+#  tm_borders(col = "gray40", alpha = .3) +
+#  tm_scale_bar(width = 8, size = 8, color.dark = "gray70") +
+  #tm_format("World", legend.position = c("right", "top"),
+#                   attr.position = c("right", "top"),
+#                   legend.frame = FALSE,
+                   #title = "May 30th Tornado Group",
+                   #title.size = 1.3,
+                   #title.position = c("left", "TOP"),
+ #                  inner.margins = c(.2, .2, .2, .2)) +
+tm_shape(May30, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3) +
+tm_shape(May30tornadoes) +
+  tm_symbols(size = 4, col = "Hour2", alpha = 0.8, palette = mypalette2, title.col = "Time [CST]", labels = c("6 to 12", "12 to 18", "18 to 24", "0 to 6"), border.alpha = 0) +
+    tm_layout(legend.title.size = 1.2,
+            legend.position = c("right", "bottom"), 
+            legend.stack = "horizontal",
+            legend.frame = FALSE, 
+            legend.text.size = 1, legend.width = -0.2)
+```
+`Figure: Tornadoes occurring on May 30, 2004 as part of a big day within a large cluster. Each point represents a genesis location and is colored by the hour it occurred. The black triangle is the geographic center of the genesis locations. The black line is the minimum convex polygon around the genesis locations (convex hull).`
+
+
+May 6, 2003
+
+```{r}
+BigDayLargeGroupTorns1994_2020 <- BigDayLargeGroupTorns1994_2020 %>%
+ mutate(ID = paste0(gsub("-", "", cDate), groupNumber))
+
+BigDaysLargeGroups1994_2020 <- BigDaysLargeGroups1994_2020 %>%
+ mutate(ID = paste0(gsub("-", "", cDate), groupNumber))
+```
+
+*May 6, 2003 Big Day*
+```{r}
+May6 <- BigDaysLargeGroups1994_2020 %>%
+  filter(ID == "200305062624")
+May6 <- st_convex_hull(May6)
+
+May6centroid <- BigDayCentroids.df %>%
+  filter(ID == "200305062624")
+
+May6tornadoes <- BigDayLargeGroupTorns1994_2020 %>% 
+  filter(ID == "200305062624")
+```
+
+*First, read in the raster. *
+```{r}
+library(raster)
+ rb <- brick(paste0("E:/Zoe/Projects/Dissertation_OutbreakClimatology/merged_AWIP32.20030506/merged_AWIP32.2003050612")) #<-- this is for varying NARR times
+  CAPE <- raster(rb, layer = 375)
+  HLCY <- raster(rb, layer = 323)
+  CIN <- raster(rb, layer = 376)
+  UGRD500 <- raster(rb, layer = 117) 
+  VGRD500 <- raster(rb, layer = 118) 
+  UGRD850 <- raster(rb, layer = 206) 
+  VGRD850 <- raster(rb, layer = 207)
+  UGRDsfc <- raster(rb, layer = 293) 
+  VGRDsfc <- raster(rb, layer = 294)     
+  DLBS <- sqrt(((UGRD500 - UGRDsfc)**2) + ((VGRD500 - VGRDsfc)**2))
+  SLBS <- sqrt(((UGRD850 - UGRDsfc)**2) + ((VGRD850 - VGRDsfc)**2))
+```
+**Convective Available Potential energy **
+```{r}
+#CAPE = projectRaster(CAPE, crs = "+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+May6 <- st_transform(May6, 
+  crs = "+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+CAPE_May6 <- crop(CAPE, extent(May6))
+CAPE_extent<- mask(CAPE_May6, May6)
+plot(CAPE_extent)
+
+maxCAPE <- which.max(CAPE_extent) #Returns a pixel number
+
+#Test that this max value equals the one in BigDays.sfdfT
+test <- getValues(CAPE_extent) 
+test<-as.matrix(test, ncol=1)
+```
+
+```{r}
+CAPEmaxpos <- xyFromCell(CAPE_extent, maxCAPE)
+
+xy <- data.frame(CAPEmaxpos)
+CAPE_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(CAPE_latlon)
+
+CAPE_latlon <- SpatialPoints(CAPE_latlon)
+proj4string(CAPE_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+counties <- us_counties()
+states <- us_states()
+```
+
+```{r}
+CAPE_fig <- tm_shape(CAPE_extent) +
+  tm_raster(title = "",  n = 6, palette = "Reds") +
+  tm_format(title = expression(paste("Convective Available Potential Energy [J ",kg^-1,"]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.22, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+  #tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May6, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(CAPE_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+CAPE_fig
+```
+
+```{r}
+CIN_May6 <- crop(CIN, extent(May6))
+CIN_extent<- mask(CIN_May6, May6)
+plot(CIN_extent)
+
+minCIN <- which.min(CIN_extent) #Returns a pixel number
+
+#Test that this max value equals the one in BigDays.sfdfT
+test <- getValues(CIN_extent) 
+test<-as.matrix(test, ncol=1)
+```
+
+```{r}
+CINminpos <- xyFromCell(CIN_extent, minCIN)
+
+xy <- data.frame(CINminpos)
+CIN_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(CIN_latlon)
+
+CIN_latlon <- SpatialPoints(CIN_latlon)
+proj4string(CIN_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+CIN_fig <- tm_shape(CIN_extent) +
+  tm_raster(title = "",  n = 6, palette = "Greens") +
+  tm_format(title = expression(paste("Convective Inhibition [J ",kg^-1,"]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.2, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+  #tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May6, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(CIN_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+CIN_fig
+```
+
+**Bulk Shear**
+```{r}
+BS_May6 <- crop(DLBS, extent(May6))
+BS_extent<- mask(BS_May6, May6)
+plot(BS_extent)
+
+maxBS <- which.max(BS_extent)
+```
+
+```{r}
+BSmaxpos <- xyFromCell(BS_extent, maxBS)
+
+xy <- data.frame(BSmaxpos)
+BS_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(BS_latlon)
+
+BS_latlon <- SpatialPoints(BS_latlon)
+proj4string(BS_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+mypalette <- brewer.pal(name = "Purples", n =6)
+mypalette <- mypalette[3:6]
+DLBS_fig <- tm_shape(BS_extent) +
+  tm_raster(title = "", n = 5, palette = mypalette) +
+  tm_format(title = expression(paste("Bulk Shear [m ",s^-1,"]")), "World", legend.position = c("right", "bottom"),
+  #tm_format(title = expression(paste("Deep-Layer Bulk Shear [m ", s^-1, "]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.2, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+#  tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May6, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(BS_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+DLBS_fig
+```
+
+
+**Bulk Shear**
+```{r}
+HLCY_May6 <- crop(HLCY, extent(May6))
+HLCY_extent<- mask(HLCY_May6, May6)
+plot(HLCY_extent)
+
+maxHLCY <- which.max(HLCY_extent)
+```
+
+```{r}
+HLCYmaxpos <- xyFromCell(HLCY_extent, maxHLCY)
+
+xy <- data.frame(HLCYmaxpos)
+HLCY_latlon <- data.frame(lon=xy$x, lat=xy$y)
+print(HLCY_latlon)
+
+HLCY_latlon <- SpatialPoints(HLCY_latlon)
+proj4string(HLCY_latlon) = CRS("+proj=lcc +lat_1=50 +lat_2=50 +lat_0=50 +lon_0=-107 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs")
+```
+
+```{r}
+HLCY_fig <- tm_shape(HLCY_extent) +
+  tm_raster(title = "", n = 5, palette = "PuRd") +
+  tm_format(title = expression(paste("Storm-Relative Helicity [", m^2 ,s^-2,"]")), "World", legend.position = c("right", "bottom"),
+  #tm_format(title = expression(paste("Deep-Layer Bulk Shear [m ", s^-1, "]")), "World", legend.position = c("right", "bottom"),
+                   attr.position = c("right", "top"),
+                   legend.frame = FALSE,
+                   inner.margins = c(.1, 0.1, .15, .1), #bottom, left, top
+                    legend.text.size = 1, legend.width = -0.2, legend.title.size=1, legend.bg.color = "white", title.size = 1.4) +
+#tm_shape(counties) +
+#  tm_borders(col = "grey") +
+  tm_scale_bar(width = 0.3, size = 0.8, position = c("left", "bottom"), color.dark = "gray70") +
+  tm_compass(size = 3, fontsize = 1, lwd = 2, color.dark = "gray70") + 
+tm_shape(states) +
+  tm_borders() +
+tm_shape(May6, is.master = TRUE, projection = merc) +
+  tm_borders(col = "black", lwd = 3)  +
+#tm_shape(May6centroid) +
+#  tm_symbols(size = 1.25, col = "black", shape = 24) +
+tm_shape(HLCY_latlon) + 
+  tm_symbols(size = 1.4, col = "black", shape = 22)
+HLCY_fig
+```
+**Combine into one figure: **
+```{r}
+tmap_arrange(CAPE_fig, CIN_fig, DLBS_fig, HLCY_fig, ncol = 2, nrow = 2)
+```
