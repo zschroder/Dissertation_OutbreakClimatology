@@ -6,7 +6,7 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
-Does this even work? 
+
 ```{r}
 library(ggplot2)
 library(dplyr)
