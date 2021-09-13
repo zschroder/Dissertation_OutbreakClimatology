@@ -1,0 +1,140 @@
+---
+title: "Chapter 2"
+output: html_document
+---
+Load the libraries needed for this project. 
+```{r}
+suppressMessages(library(sf))
+suppressMessages(library(dplyr))
+#install.packages("lubridate")
+suppressMessages(library(lubridate))
+suppressMessages(library(USAboundaries))
+#devtools::install_github("ropensci/USAboundariesData")
+suppressMessages(library(USAboundariesData))
+suppressMessages(library(tmap))
+suppressMessages(library(ggplot2))
+```
+
+```{r}
+merc =  "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+```
+
+```{r}
+load("BigDays.RData")
+```
+
+# Monthly and Yearly Variation
+
+*Year*
+```{r}
+TornsbyYear <- BigDayTornadoes %>% 
+  group_by(year = yr) %>%
+  summarize(totaltornadoes = n())
+```
+
+`Get the week labels for the data`
+```{r}
+x.Date <- as.Date(paste(rep(1994:2018, each = 12), rep(1:12, 2), 1, sep = "-"))
+library(zoo)
+x <- zoo(rnorm(24), x.Date)
+times <- time(x)
+ticks <- as.data.frame(x = seq(times[1], times[length(times)], by = "weeks"))
+
+week <- as.data.frame(ticks[1:53,])
+  
+months <- as.data.frame(format(week, "%b"))
+Mo <- as.data.frame(format(week, "%m"))
+day <- as.data.frame(format(week, "%d"))
+
+dat <- as.data.frame(cbind(week, Mo, months, day))
+colnames(dat) <- c("Week", "Mo", "Month", "Day") 
+
+dat <- dat %>%
+  group_by(Month, Day, Mo) %>%
+  summarize(count = n(),
+            Week = paste0(Month, " ", Day))
+
+dat <- dat[order(dat$Mo),]
+```
+
+Make a figure of the change in tornadoes per annum. 
+
+```{r}
+yeargraph <- ggplot(TornsbyYear, (aes(x = year, y = totaltornadoes))) +
+  geom_smooth(method = lm, span = .5, se = FALSE, color = "red", size = 1) +
+  geom_line(color = "black", lwd = 1) +
+  scale_x_continuous(expand = c(0, 0), breaks = c(seq(1994,2020,1))) +
+  scale_y_continuous(limits = c(0, 1300), breaks = c(seq(0,1300,100))) + 
+#  geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  theme_bw() +
+  xlab("Year") +
+  ylab("Number of Tornadoes\n ")
+
+yeargraph <- yeargraph + theme(axis.title.y = element_text(colour = "black"), axis.text.y = element_text(color = "black"),  axis.text.x = element_text(angle = 45, hjust = 1), axis.text = element_text(size = 12), axis.title=element_text(size=14))
+
+yeargraph
+```
+
+*Month*
+```{r}
+TornsByMonth <- BigDayTornadoes %>% 
+  group_by(mo) %>%
+  summarize(totaltornadoes = n()) 
+```
+
+`Make a figure of the total tornadoes from 1994 to 2018 by month`
+```{r}
+ggplot(TornsByMonth, aes(x = as.factor(mo), y = totaltornadoes)) +
+  geom_bar(stat = "identity", fill = "gray70") +
+  scale_x_discrete(labels = month.name) +
+  scale_y_continuous(limits = c(0, NA)) +
+  ylab("Number of Tornado Groups\nWith At Least 10 Tornadoes") + xlab("") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+( p0 <- ggplot(TornsByMonth, aes(x = mo, y = totaltornadoes)) +
+  geom_bar(stat = "identity", fill = "gray70") +
+  scale_x_continuous(breaks = seq(1, 12, 1), labels = month.abb) +
+  scale_y_continuous(limits = c(0, 6000)) +
+  coord_polar(start = 0) +
+  labs(x = "Month", y = "Number of Tornadoes") +
+  theme_minimal() )
+```
+
+## Daily (hourly) variation in tornado activity
+
+```{r}
+TornsbyHour <- BigDayTornadoes %>% 
+  group_by(TornHour = Hour) %>%
+  summarize(totaltornadoes = n())
+```
+
+`Make the labels for the x-axis`
+```{r}
+hourlabs = c("12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM", "6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "12 PM", "1 PM","2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "11 PM")
+
+hourgraph <- ggplot(TornsbyHour, (aes(x = TornHour, y = totaltornadoes))) +
+  #geom_smooth(aes(x = Tornhour, y = totaltornadoes), span = .5, se = FALSE, color = "gray70", size = 1) +
+  geom_bar(stat = "identity", color = "gray70", fill = "gray70") +
+  scale_x_continuous(expand = c(0, 0), breaks = c(seq(0,23,1)), labels = hourlabs) +
+  scale_y_continuous(limits = c(0, 3000), breaks = c(seq(0,3000,500))) + 
+#  geom_smooth(aes(x = week, y = probs/100), span = .5, se = FALSE, color = "gray70", size = 1) +
+  theme_bw() +
+  xlab("Hour") +
+  ylab("Number of Tornadoes\n ")
+
+hourgraph <- hourgraph + theme(axis.title.y = element_text(colour = "black"), axis.text.y = element_text(color = "black"),  axis.text.x = element_text(angle = 45, hjust = 1), axis.text = element_text(size = 12), axis.title=element_text(size=14))
+
+hourgraph
+```
+
+`Make a circular bar graph`
+```{r}
+ggplot(TornsbyHour, (aes(x = TornHour, y = totaltornadoes))) +
+  geom_bar(stat = "identity", fill = "gray70") +
+  scale_x_continuous(breaks = seq(0, 23, 1), labels = hourlabs) +
+  scale_y_continuous(limits = c(0,2500)) +
+  coord_polar(start = 0) +
+  labs(x = "Hour", y = "Number of Tornadoes") +
+  theme_minimal() 
+```
